@@ -3,7 +3,7 @@ Gameboy Advance player for [ulc-codec](https://github.com/Aikku93/ulc-codec).
 
 ## Details
 
-As a proof of concept of the decoding complexity of ulc-codec, a Gameboy Advance demonstration may be found in the ulcplayer-gba folder. CPU usage is around 65% for 32768Hz @ 128kbps (M/S stereo). Note that this is entirely a proof of concept; decode time for N=4096 (default for encoding tools) is 2-3 frames, so usage in real applications would need some form of threading to avoid excessive lag.
+As a proof of concept of the decoding complexity of ulc-codec, a Gameboy Advance demonstration was made. CPU usage is around 65% for 32768Hz @ 128kbps (M/S stereo). Note that this is entirely a proof of concept; decode time for N=4096 (default for encoding tools) is 2-3 frames, so usage in real applications would need some form of threading to avoid excessive lag.
 
 To use this player, you must:
 * Provide your own ```SoundData.ulc``` in the ```source/res``` folder
