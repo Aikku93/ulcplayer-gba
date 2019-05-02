@@ -12,6 +12,12 @@ To use this player, you must:
 
 The player supports both mono and stereo files (requires a rebuild; mono/stereo(+M/S) toggle found in ```source/ulc/ulc_Specs.inc```). M/S stereo isn't the best quality (as the transform is performed on clipped 8-bit samples), but this doesn't appear to cause noticeable quality degradation.
 
+## Authors
+* **Ruben Nunez** - *Initial work* - [Aikku93](https://github.com/Aikku93)
+
+## Acknowledgements
+* Special thanks to [No!ze Freakz](https://soundcloud.com/user-462957379) for permission to use their track 'Freedom' for demonstration purposes
+
 ### Pre-built tracks
 
 [No!ze Freakz - Freedom (64kbps @ 32.768kHz, M/S stereo)](No!ze%20Freakz%20-%20Freedom%20(64k).gba)
