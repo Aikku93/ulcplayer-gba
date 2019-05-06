@@ -75,7 +75,7 @@ main:
 	SWI	0x12
 0:	LDR	r0, =0x05000200
 	LDR	r1, =BgDesignSpeakerBass_Pal
-	LDR	r2, =16*2
+	LDR	r2, =16*2*2
 	BL	.Lmain_Copy32
 0:	LDR	r0, =0x06000000 + GRAPHL_TILEMAP*0x0800
 	LDR	r1, =0
@@ -303,6 +303,10 @@ UpdateGfx:
 	CMP	r9, #0x07<<7
 	MOVHI	r9, #0x07<<7
 0:	MOV	ip, #0x07000000
+	CMP	r8, #0x00              @ 'Idle' frame -> Pal0, else Pal1
+	ADDHI	r8, r8, #0x1000
+	CMP	r9, #0x00
+	ADDHI	r9, r9, #0x1000
 	ADD	r8, r8, #0x0400        @ Set OAM priority=1
 	ADD	r9, r9, #0x0400        @ Set OAM priority=1
 	STRH	r8, [ip, #0x08*0+0x04] @ L-T (tile in Attr2 bit 0..9)
