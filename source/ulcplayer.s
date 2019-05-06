@@ -28,14 +28,14 @@
 .equ SPEAKER_LT_X,  17
 .equ SPEAKER_LT_Y,   8
 .equ SPEAKER_LB_X,  13
-.equ SPEAKER_LB_Y,  93
+.equ SPEAKER_LB_Y,  94
 .equ SPEAKER_RT_X, 159
 .equ SPEAKER_RT_Y,   8
 .equ SPEAKER_RB_X, 163
-.equ SPEAKER_RB_Y,  93
-.equ GRAPH_SMPSTRIDE_RCP, 1463 @ (1<<24) / (VBlankRate * 2*GRAPH_W)
+.equ SPEAKER_RB_Y,  94
+.equ GRAPH_SMPSTRIDE_RCP, 1463 @ (1<<23) / (VBlankRate * GRAPH_W)
 /**************************************/
-.equ BGDESIGN_NTILES, 184
+.equ BGDESIGN_NTILES, 174
 .equ BGDESIGN_TILEMAP, 31
 .equ BGDESIGN_NPAL16,   8
 
@@ -65,7 +65,7 @@ main:
 	SWI	0x12
 0:	LDR	r0, =BgDesign_Map
 	LDR	r1, =0x06000000 + BGDESIGN_TILEMAP*0x0800
-	SWI	0x12
+	SWI	0x15
 0:	LDR	r0, =0x05000000
 	LDR	r1, =BgDesign_Pal
 	LDR	r2, =BGDESIGN_NPAL16 * 16*2
@@ -191,11 +191,9 @@ UpdateGfx:
 	MOV	r1, #0x1F00
 	ORR	r1, r1, #0x40
 	STRH	r1, [r0]
-	MOV	r1, #GLYPHS_TILEMAP<<8
-	ORR	r1, r1, #(GRAPHL_TILEMAP<<8)<<16
+	LDR	r1, =(0<<0 | GLYPHS_TILEMAP<<8) | (1<<0 | GRAPHL_TILEMAP<<8)<<16
 	STR	r1, [r0, #0x08]
-	MOV	r1, #GRAPHR_TILEMAP<<8
-	ORR	r1, r1, #(BGDESIGN_TILEMAP<<8)<<16
+	LDR	r1, =(1<<0 | GRAPHR_TILEMAP<<8) | (1<<0 | BGDESIGN_TILEMAP<<8)<<16
 	STR	r1, [r0, #0x0C]
 	MOV	r1, #0x00
 	STR	r1, [r0, #0x10]
@@ -249,7 +247,7 @@ UpdateGfx:
 	LDR	r4, [r4, #0x0C]
 	LDR	r4, [r4, #0x0C]
 	LDR	r5, =GRAPH_SMPSTRIDE_RCP
-	MUL	r4, r5, r4 @ Step[.22fxp]
+	MUL	r4, r5, r4 @ Step[.23fxp]
 	MOV	r5, #0x00  @ PosMu (not important to track accurately across frames)
 	LDR	r6, .LRedraw_LowPassL
 	LDR	r7, .LRedraw_LowPassR
@@ -260,14 +258,14 @@ UpdateGfx:
 	MOVS	ip, ip, lsl #0x18
 	RSB	lr, r7, ip, asr #0x18-8 @ LP_R = LP_R + (xR - LP_R)*1/32 (NOTE: 8.8fxp)
 	ADD	r7, r7, lr, asr #0x05
-	MUL	lr, r7, r7              @ [16.15]
-	ADD	r9, r9, lr, lsr #0x05   @ PowR += LP_R (16.10fxp)
+	MUL	lr, r7, r7              @ [15.16]
+	ADD	r9, r9, lr, lsr #0x05   @ PowR += LP_R (15.11fxp)
 	RSBMI	ip, ip, #0x00
 	LDRB	lr, [r0, #GRAPH_W]      @ Combine with old (nicer effect)
 	RSB	ip, lr, ip, lsr #0x18
 	ADD	ip, lr, ip, asr #0x03
 	STRB	ip, [r0, #GRAPH_W]
-0:	LDRB	ip, [r2], r5, lsr #0x18 @ Abs[xL] -> ip, update position
+0:	LDRB	ip, [r2], r5, lsr #0x17 @ Abs[xL] -> ip, update position
 	MOVS	ip, ip, lsl #0x18
 	RSB	lr, r6, ip, asr #0x18-8 @ LP_L = LP_L + (xL - LP_L)*1/32
 	ADD	r6, r6, lr, asr #0x05
@@ -278,24 +276,8 @@ UpdateGfx:
 	RSB	ip, lr, ip, lsr #0x18
 	ADD	ip, lr, ip, asr #0x03
 	STRB	ip, [r0], #0x01
-0:	BIC	r5, r5, #0xFF<<24       @ Clear integer part
+0:	BIC	r5, r5, #0x7F<<23       @ Clear integer part
 	CMP	r2, r3                  @ Wrap
-	SUBCS	r2, r2, #BLOCK_SIZE*2
-0:	ADD	r5, r5, r4              @ Fetch another round of samples for more accurate lowpass analysis
-	LDRB	ip, [r2, r1, lsl #0x08]
-	MOV	ip, ip, lsl #0x18
-	RSB	lr, r7, ip, asr #0x18-8
-	ADD	r7, r7, lr, asr #0x05
-	MUL	lr, r7, r7
-	ADD	r9, r9, lr, lsr #0x05
-	LDRB	ip, [r2], r5, lsr #0x18
-	MOV	ip, ip, lsl #0x18
-	RSB	lr, r6, ip, asr #0x18-8
-	ADD	r6, r6, lr, asr #0x05
-	MUL	lr, r6, r6
-	ADD	r8, r8, lr, lsr #0x05
-	BIC	r5, r5, #0xFF<<24
-	CMP	r2, r3
 	SUBCS	r2, r2, #BLOCK_SIZE*2
 0:	ADDS	r1, r1, #0x01<<24
 	BCC	1b
@@ -314,8 +296,8 @@ UpdateGfx:
 	STR	r8, .LRedraw_SpeakerLowPassL
 	STR	r9, .LRedraw_SpeakerLowPassR
 	MVN	ip, #0x7F
-	AND	r8, ip, r8, lsr #0x1B-7 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
-	AND	r9, ip, r9, lsr #0x1B-7
+	AND	r8, ip, r8, lsr #0x19-7 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
+	AND	r9, ip, r9, lsr #0x19-7
 	CMP	r8, #0x07<<7            @ Clip animation frames
 	MOVHI	r8, #0x07<<7
 	CMP	r9, #0x07<<7
