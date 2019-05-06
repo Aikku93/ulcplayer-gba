@@ -5,9 +5,9 @@
 .balign 2
 /**************************************/
 @ BgDesign to BG3
-@ Glyphs to BG2
-@ GraphR to BG1
-@ GraphL to BG0
+@ GraphR to BG2
+@ GraphL to BG1
+@ Glyphs to BG0
 /**************************************/
 .equ GRAPH_W,   96 @ Pixels
 .equ GRAPH_H,   64 @ Pixels (NOTE: lower half reflected from top)
@@ -16,12 +16,15 @@
 .equ GRAPHL_Y,  48 @ Pixels
 .equ GRAPHR_X,  64 @ Pixels
 .equ GRAPHR_Y,  48 @ Pixels
-.equ ARTIST_X,  48 @ Pixels (NOTE: nominal, whole row is used)
-.equ ARTIST_Y,  16 @ Pixels
-.equ ARTIST_W, 144 @ Pixels (NOTE: nominal, whole row is used)
-.equ TITLE_X,   48 @ Pixels (NOTE: nominal, whole row is used)
-.equ TITLE_Y,   32 @ Pixels
-.equ TITLE_W,  144 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE1_X,  48 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE1_Y,  16 @ Pixels
+.equ TITLE1_W, 144 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE2_X,  48 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE2_Y,  32 @ Pixels
+.equ TITLE2_W, 144 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE3_X,  48 @ Pixels (NOTE: nominal, whole row is used)
+.equ TITLE3_Y, 112 @ Pixels
+.equ TITLE3_W, 144 @ Pixels (NOTE: nominal, whole row is used)
 .equ SPEAKER_LT_X,  17
 .equ SPEAKER_LT_Y,   8
 .equ SPEAKER_LB_X,  13
@@ -188,34 +191,34 @@ UpdateGfx:
 	MOV	r1, #0x1F00
 	ORR	r1, r1, #0x40
 	STRH	r1, [r0]
-	MOV	r1, #GRAPHL_TILEMAP<<8
-	ORR	r1, r1, #(GRAPHR_TILEMAP<<8)<<16
-	STR	r1, [r0, #0x08]
 	MOV	r1, #GLYPHS_TILEMAP<<8
+	ORR	r1, r1, #(GRAPHL_TILEMAP<<8)<<16
+	STR	r1, [r0, #0x08]
+	MOV	r1, #GRAPHR_TILEMAP<<8
 	ORR	r1, r1, #(BGDESIGN_TILEMAP<<8)<<16
 	STR	r1, [r0, #0x0C]
-	LDR	r1, =((-GRAPHL_X)&0xFFFF) | ((-GRAPHL_Y)&0xFFFF)<<16
-	STR	r1, [r0, #0x10]
-	LDR	r1, =((-GRAPHR_X)&0xFFFF) | ((-GRAPHR_Y)&0xFFFF)<<16
-	STR	r1, [r0, #0x14]
 	MOV	r1, #0x00
-	STR	r1, [r0, #0x18]
+	STR	r1, [r0, #0x10]
 	STR	r1, [r0, #0x1C]
-	LDR	r1, =0x10102F53
-	STR	r1, [r0, #0x50]!       @ Layer BG0,BG1,OBJ over BG0,BG1,BG2,BG3, additive blend
+	LDR	r1, =((-GRAPHL_X)&0xFFFF) | ((-GRAPHL_Y)&0xFFFF)<<16
+	STR	r1, [r0, #0x14]
+	LDR	r1, =((-GRAPHR_X)&0xFFFF) | ((-GRAPHR_Y)&0xFFFF)<<16
+	STR	r1, [r0, #0x18]
+	LDR	r1, =0x10100E56
+	STR	r1, [r0, #0x50]!       @ Add BG1,BG2,OBJ over BG1,BG2,BG3
 0:	LDRH	r5, [r0, #0x0104-0x50] @ Get SmpPos from timer -> r5
 	LDRB	ip, [r4, #0x02]
 	SUB	r5, r5, #0x010000+BLOCK_SIZE @ Adjust for double buffer
 	ADD	r5, r5, ip, lsl #BLOCK_SIZE_LOG2
 
 .LRedraw_Clear:
-1:	LDR	r0, =GLYPHS_TILEADR + ((ARTIST_Y/8)*32)*2
+1:	LDR	r0, =GLYPHS_TILEADR + ((TITLE1_Y/8)*32)*2
 	MOV	r1, #0x00
-	MOV	r2, #0x20*2 @ Clear whole row
+	MOV	r2, #0x20*2*2 @ Clear Title1/Title2
 	BL	.LRedraw_Set32
-1:	LDR	r0, =GLYPHS_TILEADR + ((TITLE_Y/8)*32)*2
+	LDR	r0, =GLYPHS_TILEADR + ((TITLE3_Y/8)*32)*2
 	MOV	r1, #0x00
-	MOV	r2, #0x20*2 @ Clear whole row
+	MOV	r2, #0x20*2
 	BL	.LRedraw_Set32
 1:	LDR	r0, =GRAPHL_TILEADR
 	MOV	r1, #0x00
@@ -223,11 +226,14 @@ UpdateGfx:
 	BL	.LRedraw_Set32
 
 .LRedraw_DrawTitle:
-1:	LDR	r0, =GLYPHS_TILEADR + ((ARTIST_Y/8)*32)*2
-	LDR	r1, =SoundFile_Artist
+	LDR	r0, =GLYPHS_TILEADR + ((TITLE1_Y/8)*32)*2
+	LDR	r1, =SoundFile_Title1
 	BL	.LRedraw_DrawString
-1:	LDR	r0, =GLYPHS_TILEADR + ((TITLE_Y/8)*32)*2
-	LDR	r1, =SoundFile_Title
+	LDR	r0, =GLYPHS_TILEADR + ((TITLE2_Y/8)*32)*2
+	LDR	r1, =SoundFile_Title2
+	BL	.LRedraw_DrawString
+	LDR	r0, =GLYPHS_TILEADR + ((TITLE3_Y/8)*32)*2
+	LDR	r1, =SoundFile_Title3
 	BL	.LRedraw_DrawString
 
 .LRedraw_GetSamples:
@@ -315,6 +321,8 @@ UpdateGfx:
 	CMP	r9, #0x07<<7
 	MOVHI	r9, #0x07<<7
 0:	MOV	ip, #0x07000000
+	ADD	r8, r8, #0x0400        @ Set OAM priority=1
+	ADD	r9, r9, #0x0400        @ Set OAM priority=1
 	STRH	r8, [ip, #0x08*0+0x04] @ L-T (tile in Attr2 bit 0..9)
 	STRH	r9, [ip, #0x08*2+0x04] @ R-T
 	ADD	r8, r8, #0x40
@@ -392,7 +400,8 @@ UpdateGfx:
 1:	LDRB	r3, [r2], #0x01
 	CMP	r3, #0x01
 	BCS	1b
-2:	SBC	r2, r2, r1
+2:	SBCS	r2, r2, r1
+	BXCC	lr
 	RSB	r2, r2, #0x1E
 	MOV	r2, r2, lsr #0x01
 	ADD	r0, r0, r2, lsl #0x01
@@ -449,16 +458,20 @@ UpdateGfx:
 .balign 4
 
 SoundFile:
-	.incbin "source/res/No!ze Freakz - Freedom.wav.ulc"
+	.incbin "source/res/Eiffel 65 - Blue (Team Blue Radio Mix).wav.ulc"
 .size SoundFile, .-SoundFile
 
-SoundFile_Artist:
-	.asciz "No!ze Freakz"
-.size SoundFile_Artist, .-SoundFile_Artist
+SoundFile_Title1:
+	.asciz "Eiffel65"
+.size SoundFile_Title1, .-SoundFile_Title1
 
-SoundFile_Title:
-	.asciz "Freedom\x7F"
-.size SoundFile_Title, .-SoundFile_Title
+SoundFile_Title2:
+	.asciz "Blue"
+.size SoundFile_Title2, .-SoundFile_Title2
+
+SoundFile_Title3:
+	.asciz "TeamBlue Mix"
+.size SoundFile_Title3, .-SoundFile_Title3
 
 /**************************************/
 /* EOF                                */
