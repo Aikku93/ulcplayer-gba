@@ -21,5 +21,5 @@ The player supports both mono and stereo files (requires a rebuild; mono/stereo(
 
 ### Pre-built tracks
 
-[No!ze Freakz - Freedom (64kbps @ 32.768kHz, M/S stereo)](No!ze%20Freakz%20-%20Freedom%20(64k).gba)
-[Eiffel 65 - Blue (Team Blue Mix) (96kbps @ 32.768kHz, M/S stereo)](Eiffel%2065%20-%20Blue%20(Team%20Blue%20Mix)%20-%20Da%20Tweekaz%20(96k).gba)
+* [No!ze Freakz - Freedom (64kbps @ 32.768kHz, M/S stereo)](No!ze%20Freakz%20-%20Freedom%20(64k).gba)
+* [Eiffel 65 - Blue (Team Blue Mix) (96kbps @ 32.768kHz, M/S stereo)](Eiffel%2065%20-%20Blue%20(Team%20Blue%20Mix)%20-%20Da%20Tweekaz%20(96k).gba)
