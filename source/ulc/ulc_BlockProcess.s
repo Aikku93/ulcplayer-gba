@@ -205,21 +205,21 @@ ulc_BlockProcess:
 	MOV	r5, r5, asr #0x08
 	MOV	r6, r6, asr #0x08
 	MOV	r7, r7, asr #0x08
-	EORS	r0, r0, r0, lsl #0x18
+	TEQ	r0, r0, lsl #0x18
 	ADCMI	r0, r9, #0x00
-	EORS	r1, r1, r1, lsl #0x18
+	TEQ	r1, r1, lsl #0x18
 	ADCMI	r1, r9, #0x00
-	EORS	r2, r2, r2, lsl #0x18
+	TEQ	r2, r2, lsl #0x18
 	ADCMI	r2, r9, #0x00
-	EORS	r3, r3, r3, lsl #0x18
+	TEQ	r3, r3, lsl #0x18
 	ADCMI	r3, r9, #0x00
-	EORS	r4, r4, r4, lsl #0x18
+	TEQ	r4, r4, lsl #0x18
 	ADCMI	r4, r9, #0x00
-	EORS	r5, r5, r5, lsl #0x18
+	TEQ	r5, r5, lsl #0x18
 	ADCMI	r5, r9, #0x00
-	EORS	r6, r6, r6, lsl #0x18
+	TEQ	r6, r6, lsl #0x18
 	ADCMI	r6, r9, #0x00
-	EORS	r7, r7, r7, lsl #0x18
+	TEQ	r7, r7, lsl #0x18
 	ADCMI	r7, r9, #0x00
 	AND	r7, r7, #0xFF
 	AND	r6, r6, #0xFF
@@ -243,21 +243,21 @@ ulc_BlockProcess:
 	MOV	r5, r5, asr #0x08
 	MOV	r6, r6, asr #0x08
 	MOV	r7, r7, asr #0x08
-	EORS	r0, r0, r0, lsl #0x18
+	TEQ	r0, r0, lsl #0x18
 	ADCMI	r0, r9, #0x00
-	EORS	r1, r1, r1, lsl #0x18
+	TEQ	r1, r1, lsl #0x18
 	ADCMI	r1, r9, #0x00
-	EORS	r2, r2, r2, lsl #0x18
+	TEQ	r2, r2, lsl #0x18
 	ADCMI	r2, r9, #0x00
-	EORS	r3, r3, r3, lsl #0x18
+	TEQ	r3, r3, lsl #0x18
 	ADCMI	r3, r9, #0x00
-	EORS	r4, r4, r4, lsl #0x18
+	TEQ	r4, r4, lsl #0x18
 	ADCMI	r4, r9, #0x00
-	EORS	r5, r5, r5, lsl #0x18
+	TEQ	r5, r5, lsl #0x18
 	ADCMI	r5, r9, #0x00
-	EORS	r6, r6, r6, lsl #0x18
+	TEQ	r6, r6, lsl #0x18
 	ADCMI	r6, r9, #0x00
-	EORS	r7, r7, r7, lsl #0x18
+	TEQ	r7, r7, lsl #0x18
 	ADCMI	r7, r9, #0x00
 	AND	r3, r3, #0xFF
 	AND	r2, r2, #0xFF
@@ -284,7 +284,7 @@ ulc_BlockProcess:
 	MUL	r4, r8, r0          @ *--OutHi = s*a + c*b
 	MLA	r4, r7, r1, r4
 	MOV	r4, r4, asr #0x0F+8
-	EORS	r4, r4, r4, lsl #0x18
+	TEQ	r4, r4, lsl #0x18
 	ADCMI	r4, r9, #0x00
 	AND	r4, r4, #0xFF
 	ORR	r3, r4, r3, lsl #0x08
@@ -292,7 +292,7 @@ ulc_BlockProcess:
 	MUL	r1, r8, r1
 	SUB	r4, r4, r1
 	MOV	r4, r4, asr #0x0F+8
-	EORS	r4, r4, r4, lsl #0x18
+	TEQ	r4, r4, lsl #0x18
 	ADCMI	r4, r9, #0x00
 	MOV	r2, r2, lsr #0x08
 	ORR	r2, r2, r4, lsl #0x18
@@ -328,64 +328,25 @@ ulc_BlockProcess:
 
 .if ULC_STEREO && ULC_MIDSIDE_XFM
 .LMidSideXfm:
-	ADD	ip, r5, #BLOCK_SIZE*2
-	MOV	r7, #0x7F
-	SUB	r7, r7, #BLOCK_SIZE << 8
-1:	LDR	r0, [r5]
-	LDR	r1, [ip]
-	MOV	fp, r1, asr #0x18
-	MOV	sl, r0, asr #0x18
-	MOV	r9, r1, lsl #0x08
-	MOV	r9, r9, asr #0x18
-	MOV	r8, r0, lsl #0x08
-	MOV	r8, r8, asr #0x18
-	MOV	r3, r1, lsl #0x10
-	MOV	r3, r3, asr #0x18
-	MOV	r2, r0, lsl #0x10
-	MOV	r2, r2, asr #0x18
-	MOV	r1, r1, lsl #0x18
-	MOV	r0, r0, lsl #0x18
-	MOV	r0, r0, asr #0x18
-	ADD	r0, r0, r1, asr #0x18
-	SUB	r1, r0, r1, asr #0x18-1
-	ADD	r2, r2, r3
-	SUB	r3, r2, r3, lsl #0x01
-	ADD	r8, r8, r9
-	SUB	r9, r8, r9, lsl #0x01
-	ADD	sl, sl, fp
-	SUB	fp, sl, fp, lsl #0x01
-	TEQ	r0, r0, lsl #0x18
-	ADCMI	r0, r7, #0x00
-	TEQ	r1, r1, lsl #0x18
-	ADCMI	r1, r7, #0x00
-	TEQ	r2, r2, lsl #0x18
-	ADCMI	r2, r7, #0x00
-	TEQ	r3, r3, lsl #0x18
-	ADCMI	r3, r7, #0x00
-	TEQ	r8, r8, lsl #0x18
-	ADCMI	r8, r7, #0x00
-	TEQ	r9, r9, lsl #0x18
-	ADCMI	r9, r7, #0x00
-	TEQ	sl, sl, lsl #0x18
-	ADCMI	sl, r7, #0x00
-	TEQ	fp, fp, lsl #0x18
-	ADCMI	fp, r7, #0x00
-	AND	r0, r0, #0xFF
-	AND	r1, r1, #0xFF
-	AND	r2, r2, #0xFF
-	AND	r3, r3, #0xFF
-	AND	r8, r8, #0xFF
-	AND	r9, r9, #0xFF
-	ORR	r0, r0, r2, lsl #0x08
-	ORR	r0, r0, r8, lsl #0x10
-	ORR	r0, r0, sl, lsl #0x18
-	ORR	r1, r1, r3, lsl #0x08
-	ORR	r1, r1, r9, lsl #0x10
-	ORR	r1, r1, fp, lsl #0x18
-	STR	r0, [r5], #0x04
-	STR	r1, [ip], #0x04
-	ADDS	r7, r7, #0x04<<8
-	BCC	1b
+	MOV	r7, #BLOCK_SIZE
+	MOV	r8, #0x80000000
+1:	LDR	r0, [r5], #0x04
+	LDR	r1, [r5, #BLOCK_SIZE*2-4]
+0:	MOV	ip, r0, lsl #0x18
+	ADDS	r2, ip, r1, lsl #0x18
+	ADDVS	r2, r8, r2, asr #0x1F
+	SUBS	r3, ip, r1, lsl #0x18
+	ADDVS	r3, r8, r3, asr #0x1F
+	AND	r2, r2, #0xFF<<24
+	AND	r3, r3, #0xFF<<24
+	ORR	r0, r2, r0, lsr #0x08
+	ORR	r1, r3, r1, lsr #0x08
+	ADDS	r7, r7, #0x40000000
+	BCC	0b
+2:	STR	r0, [r5, #-0x04]
+	STR	r1, [r5, #BLOCK_SIZE*2-4]
+	SUBS	r7, r7, #0x04
+	BNE	1b
 .endif
 
 /**************************************/
@@ -394,7 +355,7 @@ ulc_BlockProcess:
 @ r6: &NextByte
 
 .LSaveState_Exit:
-.if ULC_STEREO
+.if 0
 	TST	r6, #0x80000000
 	BIC	r6, r6, #0x80000000 @ Clear nybble mask (always move to next byte on next frame)
 	SUBEQ	r6, r6, #0x01       @ We are always one nybble ahead, so rewind the byte if on first nybble
