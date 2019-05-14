@@ -41,13 +41,17 @@ ulc_BlockProcess:
 	TST	r0, #0x01
 	EOR	r0, r0, #0x01   @ WrBufIdx ^= 1?
 	STRH	r0, [r4, #0x00]
-0:	LDMIB	r4, {r0,r6}     @ nBlkRem -> r0, &NextByte -> r6
+0:	LDMIB	r4, {r0,r6}     @ nBlkRem -> r0, &NextData -> r6
 	LDR	r5, =ulc_OutputBuffer
 	ADDNE	r5, r5, #BLOCK_SIZE
 	SUBS	r0, r0, #0x01   @ --nBlkRem?
 	STRCS	r0, [r4, #0x04]
 	BCC	.LNoBlocksRem
-1:	LDRB	r7, [r6], #0x01 @ *Stream++ -> r7
+1:	AND	ip, r6, #0x03   @ Prepare reader (StreamData -> r7)
+	LDR	r7, [r6, -ip]!
+	ORR	r6, r6, ip, lsl #0x1D+1 @ [two nybbles per byte]
+	MOVS	ip, ip, lsl #0x03
+	MOVNE	r7, r7, lsr ip
 	MOV	r8, #0x00       @ 0 -> r8
 	MOV	r9, #0x0E40     @ "SUB r0, r8, r0, asr #0x1C", lower hword -> r9
 	LDR	sl, =ulc_TransformBuffer
@@ -56,17 +60,17 @@ ulc_BlockProcess:
 
 @ r4: &State
 @ r5: &OutputBuf | Chan<<31
-@ r6: &NextByte
-@ r7:  StreamByte
+@ r6: &NextData | NybbleCounter<<29
+@ r7:  StreamData
 @ r8:  0
 @ r9:  0x0E40
 @ sl: &CoefDst
 @ fp:  CoefRem
 
 .macro NextNybble
-	ADDS	r6, r6, #0x80000000 @ Odd nybble?
-	MOVCC	r7, r7, lsr #0x04   @  Even: Move to next nybble
-	LDRCSB	r7, [r6], #0x01     @  Odd:  Move to next byte
+	ADDS	r6, r6, #0x20000000 @ More nybbles?
+	MOVCC	r7, r7, lsr #0x04   @  Yes: Move to next nybble
+	LDRCS	r7, [r6, #0x04]!    @  No:  Move to next data
 .endm
 
 .LChannels_Loop:
@@ -140,8 +144,8 @@ ulc_BlockProcess:
 @ r3:
 @ r4: &State
 @ r5: &OutputBuf | Chan<<31
-@ r6: &NextByte
-@ r7:  StreamByte
+@ r6: &NextData | NybbleCounter<<29
+@ r7:  StreamData
 @ r8:  0
 @ r9:  0x0E40
 @ sl: &CoefBuf
@@ -352,17 +356,12 @@ ulc_BlockProcess:
 /**************************************/
 
 @ r4: &State
-@ r6: &NextByte
+@ r6: &NextData | NybbleCounter<<29
 
 .LSaveState_Exit:
-.if 0
-	TST	r6, #0x80000000
-	BIC	r6, r6, #0x80000000 @ Clear nybble mask (always move to next byte on next frame)
-	SUBEQ	r6, r6, #0x01       @ We are always one nybble ahead, so rewind the byte if on first nybble
-.else
-	SUBS	r6, r6, #0x80000000
-	ADDCC	r6, r6, #0x80000000-1
-.endif
+	MOVS	ip, r6, lsr #0x1D+1 @ Get bytes to advance by (C countains nybble rounding)
+	BIC	r6, r6, #0xE0000000 @ Clear nybble counter
+	ADC	r6, r6, ip
 	STR	r6, [r4, #0x08]
 
 .LExit:
