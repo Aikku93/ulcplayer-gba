@@ -52,3 +52,10 @@ $(BUILD)/%.s.o : %.s | $(BUILD)
 $(BUILD):; mkdir -p $@
 
 #----------------------------#
+
+.PHONY : clean
+
+clean:
+	rm -rf $(BUILD) $(TARGET).gba
+
+#----------------------------#

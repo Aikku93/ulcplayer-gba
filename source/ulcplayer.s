@@ -444,7 +444,7 @@ UpdateGfx:
 .balign 4
 
 SoundFile:
-	.incbin "source/res/Eiffel 65 - Blue (Team Blue Radio Mix).wav.ulc"
+	.incbin "source/res/Eiffel 65 - Blue (Team Blue Radio Mix) (64kbps).ulc"
 .size SoundFile, .-SoundFile
 
 SoundFile_Title1:
