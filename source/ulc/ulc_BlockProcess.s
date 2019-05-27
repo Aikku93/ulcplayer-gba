@@ -283,23 +283,22 @@ ulc_BlockProcess:
 0:	LDR	r6, =IMDCT_WS
 	LDR	r7, =IMDCT_C
 	LDR	r8, =IMDCT_S
+	MOV	r9, #0x80000000
 1:	LDR	r0, [fp, #-0x04]!   @ a = *--Lap
 	LDR	r1, [sl], #0x04     @ b = *Tmp++
 	MUL	r4, r8, r0          @ *--OutHi = s*a + c*b
 	MLA	r4, r7, r1, r4
-	MOV	r4, r4, asr #0x0F+8
-	TEQ	r4, r4, lsl #0x18
-	ADCMI	r4, r9, #0x00
-	AND	r4, r4, #0xFF
-	ORR	r3, r4, r3, lsl #0x08
+	ADDS	r4, r4, r4
+	ADDVS	r4, r9, r4, asr #0x1F
+	MOV	r3, r3, lsl #0x08
+	ORR	r3, r3, r4, lsr #0x18
 	MUL	r4, r7, r0          @ *OutLo++ = c*a - s*b
 	MUL	r1, r8, r1
 	SUB	r4, r4, r1
-	MOV	r4, r4, asr #0x0F+8
-	TEQ	r4, r4, lsl #0x18
-	ADCMI	r4, r9, #0x00
-	MOV	r2, r2, lsr #0x08
-	ORR	r2, r2, r4, lsl #0x18
+	ADDS	r4, r4, r4
+	ADDVS	r4, r9, r4, asr #0x1F
+	AND	r4, r4, #0xFF000000
+	ORR	r2, r4, r2, lsr #0x08
 0:	MUL	r0, r6, r8          @ _c = wc*c - ws*s
 	MUL	r1, r6, r7          @ _s = ws*c + wc*s
 	SUB	r7, r7, r0, lsr #IMDCT_WS_BITS
