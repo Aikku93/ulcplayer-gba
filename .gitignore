@@ -2,3 +2,4 @@ bin/*
 build/*
 MemoryMap.txt
 ulcplayer.gba
+*.ulc
