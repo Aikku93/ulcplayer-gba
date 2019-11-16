@@ -25,23 +25,23 @@
 .equ TITLE3_X,  48 @ Pixels (NOTE: nominal, whole row is used)
 .equ TITLE3_Y, 112 @ Pixels
 .equ TITLE3_W, 144 @ Pixels (NOTE: nominal, whole row is used)
-.equ SPEAKER_LT_X,  17
+.equ SPEAKER_LT_X,  14
 .equ SPEAKER_LT_Y,   8
-.equ SPEAKER_LB_X,  13
+.equ SPEAKER_LB_X,  11
 .equ SPEAKER_LB_Y,  94
-.equ SPEAKER_RT_X, 159
+.equ SPEAKER_RT_X, 162
 .equ SPEAKER_RT_Y,   8
-.equ SPEAKER_RB_X, 163
+.equ SPEAKER_RB_X, 165
 .equ SPEAKER_RB_Y,  94
 .equ GRAPH_SMPSTRIDE_RCP, 1463 @ (1<<23) / (VBlankRate * GRAPH_W)
 /**************************************/
-.equ BGDESIGN_NTILES, 174
+.equ BGDESIGN_NTILES, 172
 .equ BGDESIGN_TILEMAP, 31
 .equ BGDESIGN_NPAL16,   8
 
 .equ GLYPHS_NTILES,  95
 .equ GLYPHS_TILEMAP, 30
-.equ GLYPHS_PAL16,    6
+.equ GLYPHS_PAL16,    4
 .equ GLYPHS_TILEOFS, BGDESIGN_NTILES
 .equ GLYPHS_TILEADR, (0x06000000 + GLYPHS_TILEMAP*0x0800)
 
@@ -49,33 +49,33 @@
 .equ GRAPHL_TILEMAP, 29
 .equ GRAPHL_TILEOFS, (GLYPHS_TILEOFS + GLYPHS_NTILES)
 .equ GRAPHL_TILEADR, (0x06000000 + GRAPHL_TILEOFS*32)
-.equ GRAPHL_PAL16,    4
+.equ GRAPHL_PAL16,    6
 .equ GRAPHR_TILEMAP, 28
 .equ GRAPHR_TILEOFS, (GRAPHL_TILEOFS + GRAPH_NTILES)
 .equ GRAPHR_TILEADR, (0x06000000 + GRAPHR_TILEOFS*32)
-.equ GRAPHR_PAL16,    5
+.equ GRAPHR_PAL16,    7
 /**************************************/
 
 .thumb
 .thumb_func
 main:
 .Lmain_LoadDesign:
-0:	LDR	r0, =BgDesign_Gfx
-	LDR	r1, =0x06000000
-	SWI	0x12
-0:	LDR	r0, =BgDesign_Map
-	LDR	r1, =0x06000000 + BGDESIGN_TILEMAP*0x0800
-	SWI	0x15
+0:	LDR	r0, =0x06000000
+	LDR	r1, =BgDesign_Gfx
+	BL	UnLZSS
+0:	LDR	r0, =0x06000000 + BGDESIGN_TILEMAP*0x0800
+	LDR	r1, =BgDesign_Map
+	BL	UnLZSS
 0:	LDR	r0, =0x05000000
 	LDR	r1, =BgDesign_Pal
 	LDR	r2, =BGDESIGN_NPAL16 * 16*2
 	BL	.Lmain_Copy32
-0:	LDR	r0, =BgDesignSpeakerBass_Gfx
-	LDR	r1, =0x06010000
-	SWI	0x12
+0:	LDR	r0, =0x06010000
+	LDR	r1, =BgDesignSpeakerBass_Gfx
+	BL	UnLZSS
 0:	LDR	r0, =0x05000200
 	LDR	r1, =BgDesignSpeakerBass_Pal
-	LDR	r2, =16*2*2
+	LDR	r2, =16*2
 	BL	.Lmain_Copy32
 0:	LDR	r0, =0x06000000 + GRAPHL_TILEMAP*0x0800
 	LDR	r1, =0
@@ -202,8 +202,8 @@ UpdateGfx:
 	STR	r1, [r0, #0x14]
 	LDR	r1, =((-GRAPHR_X)&0xFFFF) | ((-GRAPHR_Y)&0xFFFF)<<16
 	STR	r1, [r0, #0x18]
-	LDR	r1, =0x10100E56
-	STR	r1, [r0, #0x50]!       @ Add BG1,BG2,OBJ over BG1,BG2,BG3
+	LDR	r1, =0x10100E46
+	STR	r1, [r0, #0x50]!       @ Add BG1,BG2 over BG1,BG2,BG3
 0:	LDRH	r5, [r0, #0x0104-0x50] @ Get SmpPos from timer -> r5
 	LDRB	ip, [r4, #0x02]
 	SUB	r5, r5, #0x010000+BLOCK_SIZE @ Adjust for double buffer
@@ -245,7 +245,9 @@ UpdateGfx:
 	LDR	r3, =ulc_OutputBuffer + BLOCK_SIZE*2 @ End -> r3
 	ADD	r2, r3, r5                           @ Src -> r2
 	LDR	r4, [r4, #0x0C]
-	LDR	r4, [r4, #0x0C]
+	CMP	r4, #0x00
+	LDRNE	r4, [r4, #0x0C]
+	MOVEQ	r2, r3
 	LDR	r5, =GRAPH_SMPSTRIDE_RCP
 	MUL	r4, r5, r4 @ Step[.23fxp]
 	MOV	r5, #0x00  @ PosMu (not important to track accurately across frames)
@@ -295,24 +297,18 @@ UpdateGfx:
 	ADDCS	r9, r7, r9, asr #0x01
 	STR	r8, .LRedraw_SpeakerLowPassL
 	STR	r9, .LRedraw_SpeakerLowPassR
-	MVN	ip, #0x7F
-	AND	r8, ip, r8, lsr #0x19-7 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
-	AND	r9, ip, r9, lsr #0x19-7
-	CMP	r8, #0x07<<7            @ Clip animation frames
-	MOVHI	r8, #0x07<<7
-	CMP	r9, #0x07<<7
-	MOVHI	r9, #0x07<<7
+	MVN	ip, #0x3F
+	AND	r8, ip, r8, lsr #0x18-6 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
+	AND	r9, ip, r9, lsr #0x18-6
+	CMP	r8, #0x07<<6            @ Clip animation frames
+	MOVHI	r8, #0x07<<6
+	CMP	r9, #0x07<<6
+	MOVHI	r9, #0x07<<6
 0:	MOV	ip, #0x07000000
-	CMP	r8, #0x00              @ 'Idle' frame -> Pal0, else Pal1
-	ADDHI	r8, r8, #0x1000
-	CMP	r9, #0x00
-	ADDHI	r9, r9, #0x1000
-	ADD	r8, r8, #0x0400        @ Set OAM priority=1
-	ADD	r9, r9, #0x0400        @ Set OAM priority=1
 	STRH	r8, [ip, #0x08*0+0x04] @ L-T (tile in Attr2 bit 0..9)
 	STRH	r9, [ip, #0x08*2+0x04] @ R-T
-	ADD	r8, r8, #0x40
-	ADD	r9, r9, #0x40
+	ADD	r8, r8, #0x0200
+	ADD	r9, r9, #0x0200
 	STRH	r8, [ip, #0x08*1+0x04] @ L-B
 	STRH	r9, [ip, #0x08*3+0x04] @ R-B
 
