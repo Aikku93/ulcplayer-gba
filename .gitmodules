@@ -1,0 +1,3 @@
+[submodule "ulcplayer-gba-prebuilt"]
+	path = ulcplayer-gba-prebuilt
+	url = ../ulcplayer-gba-prebuilt
