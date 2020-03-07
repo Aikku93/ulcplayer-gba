@@ -285,6 +285,14 @@ UpdateGfx:
 	BCC	1b
 2:	STR	r6, .LRedraw_LowPassL
 	STR	r7, .LRedraw_LowPassR
+0:	STR	r0, [sp, #-0x04]! @ sqrt on the power gives nicer speaker effect
+	MOV	r0, r8
+	SWI	0x080000
+	MOV	r8, r0
+	MOV	r0, r9
+	SWI	0x080000
+	MOV	r9, r0
+	LDR	r0, [sp], #0x04
 
 .LRedraw_DrawSpeakers:
 	LDR	r6, .LRedraw_SpeakerLowPassL
@@ -298,8 +306,8 @@ UpdateGfx:
 	STR	r8, .LRedraw_SpeakerLowPassL
 	STR	r9, .LRedraw_SpeakerLowPassR
 	MVN	ip, #0x3F
-	AND	r8, ip, r8, lsr #0x18-6 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
-	AND	r9, ip, r9, lsr #0x18-6
+	AND	r8, ip, r8, lsr #0x0B-6 @ 64x T/B 8x8 tiles per 64x64 area (arbitrary scaling)
+	AND	r9, ip, r9, lsr #0x0B-6
 	CMP	r8, #0x07<<6            @ Clip animation frames
 	MOVHI	r8, #0x07<<6
 	CMP	r9, #0x07<<6
