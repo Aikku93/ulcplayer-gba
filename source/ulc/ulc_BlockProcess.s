@@ -53,7 +53,7 @@ ulc_BlockProcess:
 	MOVS	ip, ip, lsl #0x03
 	MOVNE	r7, r7, lsr ip
 	MOV	r8, #0x00       @ 0 -> r8
-	MOV	r9, #0x0E40     @ "SUB r0, r8, r0, asr #0x1C", lower hword -> r9
+	MOV	r9, #0x06C0     @ "SUBS r0, r8, r0, asr #0x18+4-15", lower hword -> r9
 	LDR	sl, =ulc_TransformBuffer
 
 /**************************************/
@@ -63,7 +63,7 @@ ulc_BlockProcess:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
 @ r8:  0
-@ r9:  0x0E40
+@ r9:  0x06C0
 @ sl: &CoefDst
 @ fp:  CoefRem
 
@@ -83,10 +83,16 @@ ulc_BlockProcess:
 .LDecodeCoefs_Start:
 	AND	r0, r7, #0x0F
 	NextNybble
-	CMP	r0, #0x0F @ Stop? (8h,0h,Fh)
-	BEQ	.LDecodeCoefs_Stop
-0:	SUB	r0, r9, r0, lsl #0x07
-	STRH	r0, .LDecodeCoefs_Normal_Shifter @ Form "SUB r0, r8, r0, asr #0x1C-n", lower hword (0E40h - n<<7)
+	CMP	r0, #0x0E @ Stop? (8h,0h,Fh)
+	BHI	.LDecodeCoefs_Stop
+	BNE	1f
+0:	AND	r1, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
+	NextNybble
+	ADD	r0, r0, r1
+	CMP	r0, #0x13             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
+	MOVCS	r0, #0x0020
+1:	ADDCC	r0, r9, r0, lsl #0x07 @ Form "MOV r0, r0, asr #0x0D+n", lower hword (06C0h + n<<7)
+	STRH	r0, .LDecodeCoefs_Normal_Shifter
 
 .LDecodeCoefs_DecodeLoop:
 	SUBS	r0, r8, r7, lsl #0x1C    @ -QCoef -> r0?
@@ -94,10 +100,13 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_Normal:
 	NextNybble
+	MOVS	r1, r0, asr #0x10 @ 4.12fxp
+	MULNE	r0, r1, r1        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
+	RSBPL	r0, r0, #0x00     @ <- Coefficients are negated (-PL, not -MI) because of the IMDCT variant used
 .LDecodeCoefs_Normal_Shifter:
-	SUB	r0, r8, r0, asr #0x00 @ Coef=QCoef<<Quant -> r0 (NOTE: Self-modified dequantization)
-	STR	r0, [sl], #0x04       @ Coefs[n++] = Coef
-	SUBS	fp, fp, #0x01         @ --CoefRem?
+	MOV	r0, r0, asr #0x00 @ Coef=QCoef*2^(-24+16-Quant) -> r0 (NOTE: Self-modifying dequantization)
+	STR	r0, [sl], #0x04   @ Coefs[n++] = Coef
+	SUBS	fp, fp, #0x01     @ --CoefRem?
 	BNE	.LDecodeCoefs_DecodeLoop
 1:	B	.LDecodeCoefs_NoMoreCoefs
 
@@ -147,7 +156,7 @@ ulc_BlockProcess:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
 @ r8:  0
-@ r9:  0x0E40
+@ r9:  0x06C0
 @ sl: &CoefBuf
 @ fp:
 @ ip:
@@ -155,32 +164,6 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_BlockUnpack:
 	STMFD	sp!, {r4-r9}
-
-.LDecodeCoefs_AntiPreEcho:
-	MOV	lr, #BLOCK_SIZE
-1:	LDMIA	sl, {r0-r7}
-	ADD	r0, r0, r1
-	SUB	r1, r0, r1, lsl #0x01
-	ADD	r2, r2, r3
-	SUB	r3, r2, r3, lsl #0x01
-	ADD	r4, r4, r5
-	SUB	r5, r4, r5, lsl #0x01
-	ADD	r6, r6, r7
-	SUB	r7, r6, r7, lsl #0x01
-	STMIA	sl!, {r0-r7}
-	LDMIA	sl, {r0-r7}
-	ADD	r0, r0, r1
-	SUB	r1, r0, r1, lsl #0x01
-	ADD	r2, r2, r3
-	SUB	r3, r2, r3, lsl #0x01
-	ADD	r4, r4, r5
-	SUB	r5, r4, r5, lsl #0x01
-	ADD	r6, r6, r7
-	SUB	r7, r6, r7, lsl #0x01
-	STMIA	sl!, {r0-r7}
-	SUBS	lr, lr, #0x10
-	BNE	1b
-2:	SUB	sl, sl, #BLOCK_SIZE*4 @ Rewind buffer
 
 .LDecodeCoefs_IMDCT:
 	MOV	r0, sl
