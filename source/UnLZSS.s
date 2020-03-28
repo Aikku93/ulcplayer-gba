@@ -41,7 +41,7 @@ UnLZSS:
 	@BCS	.LReadLoop_Block
 
 .LReadLoop_Block:
-#if 0
+.if 0
 	LDRB	ip, [r1], #0x01   @ MSB|Cnt<<4 -> ip
 	LDRB	r5, [r1], #0x01   @ LSB -> r5
 	ADDS	r4, ip, #(3-1)<<4 @ (Len+3 - 1)<<4 -> r4 [-1 for BCS loop] [C=0]
@@ -53,7 +53,7 @@ UnLZSS:
 	STRB	ip, [r0], #0x01
 	BCS	1b
 	B	.LReadLoop_CheckEnd
-#else
+.else @ VRAM compatibility
 	LDRB	ip, [r1], #0x01   @ MSB|Cnt<<4 -> ip
 	LDRB	r5, [r1], #0x01   @ LSB -> r5
 	ADDS	r4, ip, #(3-1)<<4 @ (Len+3 - 1)<<4 -> r4 [-1 for BCS loop] [C=0]
@@ -94,7 +94,7 @@ UnLZSS:
 	ORREQ	r6, r6, ip, lsl #0x08
 	STREQH	r6, [r0], #0x01
 	B	.LReadLoop_CheckEnd
-#endif
+.endif
 
 .LReadLoop_Byte:
 	LDRB	ip, [r1], #0x01
