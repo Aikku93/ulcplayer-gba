@@ -1,60 +1,54 @@
 /**************************************/
 .include "source/ulc/ulc_Specs.inc"
 /**************************************/
-.if BLOCK_OVERLAP == 2048
-	.equ IMDCT_WS_BITS, 22
-	.equ IMDCT_WS, (0x0C91) @ Sin[1.0*(1/Overlap)*Pi/2] * 2^22
-	.equ IMDCT_C,  (0x8000) @ Cos[0.5*(1/Overlap)*Pi/2] * 2^15
-	.equ IMDCT_S,  (0x000D) @ Sin[0.5*(1/Overlap)*Pi/2] * 2^15
-.elseif BLOCK_OVERLAP == 1536
-	.equ IMDCT_WS_BITS, 26
-	.equ IMDCT_WS, (0x010C15)
-	.equ IMDCT_C,  (0x8000)
-	.equ IMDCT_S,  (0x0011)
-.elseif BLOCK_OVERLAP == 1024
-	.equ IMDCT_WS_BITS, 21
-	.equ IMDCT_WS, (0x0C91)
-	.equ IMDCT_C,  (0x8000)
-	.equ IMDCT_S,  (0x0019)
-.elseif BLOCK_OVERLAP == 768
-	.equ IMDCT_WS_BITS, 25
-	.equ IMDCT_WS, (0x010C15)
-	.equ IMDCT_C,  (0x8000)
-	.equ IMDCT_S,  (0x0022)
-.elseif BLOCK_OVERLAP == 512
-	.equ IMDCT_WS_BITS, 20
-	.equ IMDCT_WS, (0x0C91)
-	.equ IMDCT_C,  (0x8000)
-	.equ IMDCT_S,  (0x0032)
-.endif
-/**************************************/
 .section .iwram, "ax", %progbits
 .balign 4
 /**************************************/
+
+.macro NextNybble
+	ADDS	r6, r6, #0x20000000 @ More nybbles?
+	LDRCS	r7, [r6, #0x04]!    @  No:  Move to next data
+	MOVCC	r7, r7, lsr #0x04   @  Yes: Move to next nybble
+.endm
+
+/**************************************/
+
+@ Return values:
+@  Anything less than 0: Nothing to process
+@  1: A block was decoded
+@  0: End of stream
 
 ulc_BlockProcess:
 	STMFD	sp!, {r4-fp,lr}
 	LDR	r4, =ulc_State
 0:	LDRH	r0, [r4, #0x00] @ --nBufProc?
 	SUBS	r0, r0, #0x0100
-	BCC	.LExit
+	BCC	.LExit          @  Return something < 0 for 'nothing to process'
 	TST	r0, #0x01
 	EOR	r0, r0, #0x01   @ WrBufIdx ^= 1?
 	STRH	r0, [r4, #0x00]
-0:	LDMIB	r4, {r0,r6}     @ nBlkRem -> r0, &NextData -> r6
-	LDR	r5, =ulc_OutputBuffer
-	ADDNE	r5, r5, #BLOCK_SIZE
-	SUBS	r0, r0, #0x01   @ --nBlkRem?
-	STRCS	r0, [r4, #0x04]
+0:	LDR	r5, =ulc_OutputBuffer
+	LDR	fp, [r4, #0x10] @  BlockSize -> fp
+	LDR	r1, [r4, #0x04] @  nBlkRem   -> r1
+	LDR	r6, [r4, #0x0C] @ &NextData  -> r6
+	ADDNE	r5, r5, fp      @ Skip to second buffer as needed
+	SUBS	r1, r1, #0x01   @ --nBlkRem?
+	STRCS	r1, [r4, #0x04]
 	BCC	.LNoBlocksRem
-1:	AND	ip, r6, #0x03   @ Prepare reader (StreamData -> r7)
-	LDR	r7, [r6, -ip]!
-	ORR	r6, r6, ip, lsl #0x1D+1 @ [two nybbles per byte]
-	MOVS	ip, ip, lsl #0x03
-	MOVNE	r7, r7, lsr ip
+1:	AND	r0, r6, #0x03   @ Prepare reader (StreamData -> r7)
+	LDR	r7, [r6, -r0]!
+	ORR	r6, r6, r0, lsl #0x20-3+1 @ [Two nybbles per byte, hence +1]
+	MOVS	r0, r0, lsl #0x03
+	MOVNE	r7, r7, lsr r0
 	MOV	r8, #0x00       @ 0 -> r8
-	MOV	r9, #0x06C0     @ "SUBS r0, r8, r0, asr #0x18+4-15", lower hword -> r9
+	MOV	r9, #0x06C0     @ "MOV r0, r0, asr #0x18+4-15", lower HWord -> r9
 	LDR	sl, =ulc_TransformBuffer
+1:	AND	r0, r7, #0x0F   @ NextOverlap = BlockSize >> Nybble()
+	MOV	r0, fp, lsr r0
+	LDR	ip, [r4, #0x14] @ Read BlockOverlap from state, and store NextOverlap
+	STR	r0, [r4, #0x14]
+	STMFD	sp!, {fp,ip}    @ BlockSize -> sp+00h, BlockOverlap -> sp+04h
+	NextNybble
 
 /**************************************/
 
@@ -65,16 +59,12 @@ ulc_BlockProcess:
 @ r8:  0
 @ r9:  0x06C0
 @ sl: &CoefDst
-@ fp:  CoefRem
-
-.macro NextNybble
-	ADDS	r6, r6, #0x20000000 @ More nybbles?
-	MOVCC	r7, r7, lsr #0x04   @  Yes: Move to next nybble
-	LDRCS	r7, [r6, #0x04]!    @  No:  Move to next data
-.endm
+@ fp:  BlockSize | -CoefRem<<16
+@ sp+00h: BlockSize
+@ sp+04h: BlockOverlap
 
 .LChannels_Loop:
-	MOV	fp, #BLOCK_SIZE
+	SUB	fp, fp, fp, lsl #0x10
 	B	.LDecodeCoefs_Start
 
 .LDecodeCoefs_ChangeQuant:
@@ -86,9 +76,9 @@ ulc_BlockProcess:
 	CMP	r0, #0x0E @ Stop? (8h,0h,Fh)
 	BHI	.LDecodeCoefs_Stop
 	BNE	1f
-0:	AND	r1, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
+0:	AND	r0, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
 	NextNybble
-	ADD	r0, r0, r1
+	ADD	r0, r0, #0x0E
 	CMP	r0, #0x13             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
 	MOVCS	r0, #0x0020
 1:	ADDCC	r0, r9, r0, lsl #0x07 @ Form "MOV r0, r0, asr #0x0D+n", lower hword (06C0h + n<<7)
@@ -102,12 +92,12 @@ ulc_BlockProcess:
 	NextNybble
 	MOVS	r1, r0, asr #0x10 @ 4.12fxp
 	MULNE	r0, r1, r1        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
-	RSBPL	r0, r0, #0x00     @ <- Coefficients are negated (-PL, not -MI) because of the IMDCT variant used
+	RSBMI	r0, r0, #0x00
 .LDecodeCoefs_Normal_Shifter:
 	MOV	r0, r0, asr #0x00 @ Coef=QCoef*2^(-24+16-Quant) -> r0 (NOTE: Self-modifying dequantization)
 	STR	r0, [sl], #0x04   @ Coefs[n++] = Coef
-	SUBS	fp, fp, #0x01     @ --CoefRem?
-	BNE	.LDecodeCoefs_DecodeLoop
+	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
+	BCC	.LDecodeCoefs_DecodeLoop
 1:	B	.LDecodeCoefs_NoMoreCoefs
 
 .LDecodeCoefs_EscapeCode:
@@ -121,29 +111,32 @@ ulc_BlockProcess:
 	MOV	r0, r0, ror #0x1C
 	ADD	r0, r0, #(26-2)/2 - (0xC<<4)
 	NextNybble
-2:	SUB	fp, fp, r0, lsl #0x01 @ CoefRem -= (zR-1)*2
+2:	ADD	fp, fp, r0, lsl #0x01+16 @ CoefRem -= (zR-1)*2
 	MOV	r1, #0x00
 20:	STMIA	sl!, {r1,r8}
 	SUBS	r0, r0, #0x01
 	BCS	20b
-3:	SUBS	fp, fp, #0x02 @ CoefRem -= 2? (because biased earlier)
-	BNE	.LDecodeCoefs_DecodeLoop
+3:	ADDS	fp, fp, #0x02<<16 @ CoefRem -= 2? (because biased earlier)
+	BCC	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
 .LDecodeCoefs_Stop:
 	MOV	r0, #0x00
 	MOV	r1, #0x00
 	MOV	r2, #0x00
-	MOVS	fp, fp, lsr #0x01
+	RSB	ip, fp, #0x010000
+	MOVS	ip, ip, lsr #0x01+16
 	STRCS	r0, [sl], #0x04
-	MOVS	fp, fp, lsr #0x01
+	MOVS	ip, ip, lsr #0x01
 	STMCSIA	sl!, {r0-r1}
 1:	STMNEIA	sl!, {r0-r2,r8}
-	SUBNES	fp, fp, #0x01
+	SUBNES	ip, ip, #0x01
 	BNE	1b
+2:	MOV	fp, fp, lsl #0x10 @ Clear CoefRem
+	MOV	fp, fp, lsr #0x10
 
 .LDecodeCoefs_NoMoreCoefs:
-	SUB	sl, sl, #BLOCK_SIZE*4 @ Rewind buffer
+	SUB	sl, sl, fp, lsl #0x02 @ Rewind buffer
 
 /**************************************/
 
@@ -158,31 +151,38 @@ ulc_BlockProcess:
 @ r8:  0
 @ r9:  0x06C0
 @ sl: &CoefBuf
-@ fp:
+@ fp:  BlockSize
 @ ip:
 @ lr:
+@ sp+00h: BlockSize
+@ sp+04h: BlockOverlap
 
 .LDecodeCoefs_BlockUnpack:
 	STMFD	sp!, {r4-r9}
 
 .LDecodeCoefs_IMDCT:
 	MOV	r0, sl
-	ADD	r1, sl, #BLOCK_SIZE*4
-	MOV	r2, #BLOCK_SIZE
+	ADD	r1, sl, fp, lsl #0x02
+	MOV	r2, fp
 	BL	Fourier_DCT4
-0:	MOV	r9, #0x7F
-	ADD	sl, sl, #(BLOCK_SIZE/2)*4                 @ Tmp = TmpBuf+N/2 (forwards)
-	LDR	fp, =ulc_LappingBuffer + (BLOCK_SIZE/2)*4 @ Lap = LapBuf+N/2 (backwards)
-	LDR	ip, [sp, #0x04]     @ OutLo
+0:	LDR	r0, [sp, #0x1C]           @ BlockOverlap -> r0
+	LDR	ip, [sp, #0x04]           @ OutLo = OutBuf+0
+	MOV	r9, #0x7F
+	SUB	r9, r9, fp, lsl #0x10     @ 0x7F | -BlockSize<<16 -> r9
+	SUB	sl, sl, r9, asr #0x10+1-2 @ Tmp   = TmpBuf+N/2 (forwards)
+	LDR	fp, =ulc_LappingBuffer    @ Lap   = LapBuf+N/2 (backwards)
+	SUB	fp, fp, r9, asr #0x10+1-2
 .if ULC_STEREO
 	TST	ip, #0x80000000
-	ADDNE	ip, ip, #BLOCK_SIZE*2
-	ADDNE	fp, fp, #(BLOCK_SIZE/2)*4
+	SUBNE	ip, ip, r9, asr #0x10-1
+	SUBNE	fp, fp, r9, asr #0x10+1-2
 	BIC	ip, ip, #0x80000000
 .endif
-	ADD	lr, ip, #BLOCK_SIZE @ OutHi
-.if BLOCK_OVERLAP < BLOCK_SIZE
-0:	SUB	r9, r9, #(BLOCK_SIZE-BLOCK_OVERLAP) << 8
+	SUB	lr, ip, r9, asr #0x10     @ OutHi = OutLo + BlockSize
+	ADDS	r9, r9, r0, lsl #0x10     @ Have non-overlap samples?
+	BCS	.LDecodeCoefs_IMDCT_Overlapped
+
+.LDecodeCoefs_IMDCT_NonOverlapped:
 1:	LDMDB	fp!, {r0-r7}
 	MOV	r0, r0, asr #0x08
 	MOV	r1, r1, asr #0x08
@@ -259,50 +259,55 @@ ulc_BlockProcess:
 	ORR	r2, r2, r5, lsl #0x10
 	ORR	r2, r2, r4, lsl #0x18
 	STMDB	lr!, {r2-r3}
-2:	ADDS	r9, r9, #0x10<<8
+2:	ADDS	r9, r9, #0x10<<16
 	BCC	1b
-.endif
-.if BLOCK_OVERLAP
-0:	LDR	r6, =IMDCT_WS
-	LDR	r7, =IMDCT_C
-	LDR	r8, =IMDCT_S
+
+@ NOTE: Overlap cannot be 0, so no need to check for that here
+.LDecodeCoefs_IMDCT_Overlapped:
+	LDR	r8, =Fourier_DCT4_CosSin - 0x04*(16/2)
+	ADD	r4, sp, #0x18
+	LDMIA	r4, {r4,r5}           @ BlockSize -> r4, BlockOverlap -> r5
 	MOV	r9, #0x80000000
-1:	LDR	r0, [fp, #-0x04]!   @ a = *--Lap
-	LDR	r1, [sl], #0x04     @ b = *Tmp++
-	MUL	r4, r8, r0          @ *--OutHi = s*a + c*b
-	MLA	r4, r7, r1, r4
-	ADDS	r4, r4, r4
-	ADDVS	r4, r9, r4, asr #0x1F
+	ADD	r8, r8, r5, lsl #0x02-1
+1:	LDR	r6, [r8], #0x04
+	LDR	r0, [fp, #-0x04]!     @ a = *--Lap
+	LDR	r1, [sl], #0x04       @ b = *Tmp++
+	MOV	r7, r6, lsr #0x10     @ s -> r7
+	BIC	r6, r6, r7, lsl #0x10 @ c -> r6
+	MUL	r5, r7, r0            @ *--OutHi = s*a + c*b
+	MLA	r5, r6, r1, r5
+	@ stall
+	ADDS	r5, r5, r5
+	ADDVS	r5, r9, r5, asr #0x1F
 	MOV	r3, r3, lsl #0x08
-	ORR	r3, r3, r4, lsr #0x18
-	MUL	r4, r7, r0          @ *OutLo++ = c*a - s*b
-	MUL	r1, r8, r1
-	SUB	r4, r4, r1
-	ADDS	r4, r4, r4
-	ADDVS	r4, r9, r4, asr #0x1F
-	AND	r4, r4, #0xFF000000
-	ORR	r2, r4, r2, lsr #0x08
-0:	MUL	r0, r6, r8          @ _c = wc*c - ws*s
-	MUL	r1, r6, r7          @ _s = ws*c + wc*s
-	SUB	r7, r7, r0, lsr #IMDCT_WS_BITS
-	ADD	r8, r8, r1, lsr #IMDCT_WS_BITS
+	ORR	r3, r3, r5, lsr #0x18
+	MUL	r5, r6, r0            @ *OutLo++ = c*a - s*b
+	MUL	r1, r7, r1
+	@ stall
+	SUB	r5, r5, r1
+	ADDS	r5, r5, r5
+	ADDVS	r5, r9, r5, asr #0x1F
+	AND	r5, r5, #0xFF000000
+	ORR	r2, r5, r2, lsr #0x08
 0:	ADDS	ip, ip, #0x40000000 @ Repeat until have 4 samples in each register
 	BCC	1b
 	STR	r2, [ip], #0x04
 	STR	r3, [lr, #-0x04]!
 2:	CMP	ip, lr
 	BNE	1b
-.endif
-0:	MOV	r9, #BLOCK_SIZE/2
-	SUB	sl, sl, #BLOCK_SIZE*4
+
+.LDecodeCoefs_IMDCT_CopyAliasing:
+	SUB	r9, r4, r4, lsl #0x10
+	SUB	sl, sl, r4, lsl #0x02
 1:	LDMIA	sl!, {r0-r7}
 	STMIA	fp!, {r0-r7}
 	LDMIA	sl!, {r0-r7}
 	STMIA	fp!, {r0-r7}
-	SUBS	r9, r9, #0x10
-	BNE	1b
-0:	LDMFD	sp!, {r4-r9}
-	SUB	sl, sl, #(BLOCK_SIZE/2)*4 @ Rewind buffer
+	ADDS	r9, r9, #0x10*2<<16 @ Only copying half the samples, hence *2
+	BCC	1b
+0:	SUB	sl, sl, r9, lsl #0x02-0x01 @ Rewind buffer
+	MOV	fp, r9 @ ResetCoefRem=BlockSize
+	LDMFD	sp!, {r4-r9}
 
 .LDecodeCoefs_NextChan:
 .if ULC_STEREO
@@ -314,24 +319,25 @@ ulc_BlockProcess:
 
 .if ULC_STEREO && ULC_MIDSIDE_XFM
 .LMidSideXfm:
-	MOV	r7, #BLOCK_SIZE
-	MOV	r8, #0x80000000
-1:	LDR	r0, [r5], #0x04
-	LDR	r1, [r5, #BLOCK_SIZE*2-4]
+	MOV	r7, #0x80000000
+	MOV	r8, fp
+	MOV	r9, fp
+1:	LDR	r0, [r5]
+	LDR	r1, [r5, r9, lsl #0x01]
 0:	MOV	ip, r0, lsl #0x18
 	ADDS	r2, ip, r1, lsl #0x18
-	ADDVS	r2, r8, r2, asr #0x1F
+	ADDVS	r2, r7, r2, asr #0x1F
 	SUBS	r3, ip, r1, lsl #0x18
-	ADDVS	r3, r8, r3, asr #0x1F
+	ADDVS	r3, r7, r3, asr #0x1F
 	AND	r2, r2, #0xFF<<24
 	AND	r3, r3, #0xFF<<24
 	ORR	r0, r2, r0, lsr #0x08
 	ORR	r1, r3, r1, lsr #0x08
-	ADDS	r7, r7, #0x40000000
+	ADDS	r8, r8, #0x40000000
 	BCC	0b
-2:	STR	r0, [r5, #-0x04]
-	STR	r1, [r5, #BLOCK_SIZE*2-4]
-	SUBS	r7, r7, #0x04
+2:	STR	r1, [r5, r9, lsl #0x01]
+	STR	r0, [r5], #0x04
+	SUBS	r8, r8, #0x04
 	BNE	1b
 .endif
 
@@ -344,7 +350,9 @@ ulc_BlockProcess:
 	MOVS	ip, r6, lsr #0x1D+1 @ Get bytes to advance by (C countains nybble rounding)
 	BIC	r6, r6, #0xE0000000 @ Clear nybble counter
 	ADC	r6, r6, ip
-	STR	r6, [r4, #0x08]
+	STR	r6, [r4, #0x0C]
+	ADD	sp, sp, #0x08 @ Pop BlockSize, BlockOverlap
+	MOV	r0, #0x01 @ Return 'block was decoded'
 
 .LExit:
 	LDMFD	sp!, {r4-fp,lr}
@@ -361,9 +369,9 @@ ulc_BlockProcess:
 	MOV	r6, #0x00
 	MOV	r7, #0x00
 	MOV	r8, #0x00
-	MOV	r9, #BLOCK_SIZE
+	MOV	r9, #MAX_BLOCK_SIZE
 .if ULC_STEREO
-	ADD	sl, r5, #BLOCK_SIZE*2
+	ADD	sl, r5, #MAX_BLOCK_SIZE*2
 .endif
 1:	STMIA	r5!, {r0-r4,r6-r8}
 	STMIA	r5!, {r0-r4,r6-r8}
@@ -377,7 +385,16 @@ ulc_BlockProcess:
 .endif
 	SUBS	r9, r9, #0x08*16
 	BNE	1b
-2:	B	.LExit
+2:	MOV	r2, #0x04000000
+	STRH	r2, [r2, #0x82]   @ Disable DMA audio
+	STR	r2, [r2, #0xC4]   @ Disable DMA1
+.if ULC_STEREO
+	STR	r2, [r2, #0xD0]   @ Disable DMA2
+.endif
+	STR	r2, [r2, #0x0100] @ Disable TM0
+	STR	r2, [r2, #0x0104] @ Disable TM1
+3:	@MOV	r0, #0x00 @ Return 'end of stream'
+	B	.LExit
 
 /**************************************/
 .size   ulc_BlockProcess, .-ulc_BlockProcess
@@ -388,17 +405,17 @@ ulc_BlockProcess:
 /**************************************/
 
 ulc_TransformBuffer:
-	.space 4*BLOCK_SIZE
+	.space 0x04 * MAX_BLOCK_SIZE
 .size ulc_TransformBuffer, .-ulc_TransformBuffer
 
 ulc_TransformTemp:
-	.space 4*BLOCK_SIZE
+	.space 0x04 * MAX_BLOCK_SIZE
 .size ulc_TransformTemp, .-ulc_TransformTemp
 
 ulc_LappingBuffer:
-	.space 4*(BLOCK_SIZE/2)
+	.space 0x04 * (MAX_BLOCK_SIZE/2)
 .if ULC_STEREO
-	.space 4*(BLOCK_SIZE/2)
+	.space 0x04 * (MAX_BLOCK_SIZE/2)
 .endif
 .size ulc_LappingBuffer, .-ulc_LappingBuffer
 
