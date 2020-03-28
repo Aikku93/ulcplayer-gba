@@ -2,13 +2,14 @@
 .section .iwram, "ax", %progbits
 .balign 4
 /**************************************/
-.equ DCT2_ACCURATE, 1
+.equ DCT2_ACCURATE,       1
+.equ DCT2_LESS_STACK_USE, 0
 /**************************************/
 
 @ r0: &Buf
 @ r1: &Tmp
 @ r2:  N
-@ NOTE: Caller must be ARM code
+@ NOTE: Must return to ARM code
 
 .arm
 Fourier_DCT2:
@@ -20,33 +21,26 @@ Fourier_DCT2:
 0:	SUB	sl, r2, r2, lsl #0x10
 	ADD	r9, r0, r2, lsl #0x02   @ SrcHi = Buf+N
 	ADD	r8, r1, r2, lsl #0x02-1 @ DstHi = Tmp+N/2
-1:	LDMIA	r0!, {r4-r7}
+1:
+.rept 2
+	LDMIA	r0!, {r4-r7}
 	LDMDB	r9!, {r2,r3,ip,lr}
-	ADD	r4, r4, lr
-	ADD	r5, r5, ip
-	ADD	r6, r6, r3
 	ADD	r7, r7, r2
+	ADD	r6, r6, r3
+	ADD	r5, r5, ip
+	ADD	r4, r4, lr
 	STMIA	r1!, {r4-r7}
 	SUB	r4, r4, lr, lsl #0x01
 	SUB	r5, r5, ip, lsl #0x01
 	SUB	r6, r6, r3, lsl #0x01
 	SUB	r7, r7, r2, lsl #0x01
 	STMIA	r8!, {r4-r7}
-2:	LDMIA	r0!, {r4-r7}
-	LDMDB	r9!, {r2,r3,ip,lr}
-	ADD	r4, r4, lr
-	ADD	r5, r5, ip
-	ADD	r6, r6, r3
-	ADD	r7, r7, r2
-	STMIA	r1!, {r4-r7}
-	SUB	r4, r4, lr, lsl #0x01
-	SUB	r5, r5, ip, lsl #0x01
-	SUB	r6, r6, r3, lsl #0x01
-	SUB	r7, r7, r2, lsl #0x01
-	STMIA	r8!, {r4-r7}
-3:	ADDS	sl, sl, #0x10<<16
+.endr
+2:	ADDS	sl, sl, #0x10<<16
 	BCC	1b
+.if DCT2_LESS_STACK_USE
 0:	LDMFD	sp!, {r4-r7}
+.endif
 
 @ r8: Tmp+N
 @ r9: Buf+N/2
@@ -63,7 +57,9 @@ Fourier_DCT2:
 	BL	Fourier_DCT4
 
 .LMerge:
+.if DCT2_LESS_STACK_USE
 	STMFD	sp!, {r4-r7}
+.endif
 0:	SUB	r0, r9, sl, lsl #0x02-1 @ Dst=Buf
 	SUB	r1, r8, sl, lsl #0x02   @ SrcLo=Tmp
 	SUB	r2, r8, sl, lsl #0x02-1 @ SrcHi=Tmp+N/2
@@ -84,14 +80,14 @@ Fourier_DCT2:
 .LDCT2_8:
 	STMFD	sp!, {r4-fp,lr}
 	LDMIA	r0, {r1-r8}
-0:	ADD	r1, r1, r8            @ s07 -> r1
-	ADD	r2, r2, r7            @ s16 -> r2
+0:	ADD	r4, r4, r5            @ s34 -> r4
 	ADD	r3, r3, r6            @ s25 -> r3
-	ADD	r4, r4, r5            @ s34 -> r4
-	SUB	r5, r4, r5, lsl #0x01 @ d34 -> r5
-	SUB	r6, r3, r6, lsl #0x01 @ d25 -> r6
-	SUB	r7, r2, r7, lsl #0x01 @ d16 -> r7
+	ADD	r2, r2, r7            @ s16 -> r2
+	ADD	r1, r1, r8            @ s07 -> r1
 	SUB	r8, r1, r8, lsl #0x01 @ d07 -> r8
+	SUB	r7, r2, r7, lsl #0x01 @ d16 -> r7
+	SUB	r6, r3, r6, lsl #0x01 @ d25 -> r6
+	SUB	r5, r4, r5, lsl #0x01 @ d34 -> r5
 0:	ADD	r1, r1, r4            @ ss07s34 -> r1
 	ADD	r2, r2, r3            @ ss16s25 -> r2
 	SUB	r3, r2, r3, lsl #0x01 @ ds16s25 -> r3
@@ -123,15 +119,15 @@ Fourier_DCT2:
 	MUL	r8, r7, fp            @ d25d16y = -s1_4*d25 + c1_4*d16 -> r8 [.15]
 	MUL	fp, r6, lr
 	MUL	lr, r7, lr
-	ADD	r5, r5, lr, asr #0x02
 	SUB	r8, r8, fp, asr #0x02
+	ADD	r5, r5, lr, asr #0x02
 2:	MOV	lr, #0x2D00           @ sqrt1_2[.14] -> lr
 	ORR	lr, lr, #0x41
 	ADD	r1, r1, r2            @ a0 =       ss07s34 +      ss16s25 -> r1 = X0
 	SUB	r7, r1, r2, lsl #0x01 @ b0 =       ss07s34 -      ss16s25 -> r7 = X4/sqrt1_2
 	MUL	r2, r7, lr
-	MOV	r7, r2, asr #0x0E     @ [X4 -> r7]
 	MOV	sl, sl, asr #0x0E
+	MOV	r7, r2, asr #0x0E     @ [X4 -> r7]
 	ADD	sl, sl, r5, asr #0x0F @ a1 =       d34d07y +      d25d16x -> sl
 	SUB	r5, sl, r5, asr #0x0E @ c1 =       d34d07y -      d25d16x -> r5 = X3
 	MOV	r9, r9, asr #0x0E
