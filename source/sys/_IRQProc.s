@@ -19,14 +19,16 @@ _IRQProc:
 2:	LDRNE	r0, =_IRQTable        @ Handler -> r0?
 	LDRNE	r2, =0x077CB531
 	MULNE	r3, r2, r1
-	ADRNE	r2, .LIRQLog2
+	ADRNE	r2, _IRQProc_Log2Tab
 	LDRNEB	r2, [r2, r3, lsr #0x20-5]
 	LDRNE	r0, [r0, r2, lsl #0x02]
 	CMPNE	r0, #0x00
 	BXNE	r0
 	BX	lr
 
-.LIRQLog2:
+@ Log2 is useful elsewhere, so make this table global
+.global _IRQProc_Log2Tab
+_IRQProc_Log2Tab:
 	.byte  0, 1,28, 2,29,14,24,3
 	.byte 30,22,20,15,25,17, 4,8
 	.byte 31,27,13,23,21,19,16,7
