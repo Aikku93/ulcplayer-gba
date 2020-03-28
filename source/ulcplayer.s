@@ -59,6 +59,10 @@
 .thumb
 .thumb_func
 main:
+	LDR	r0, =0x04000204 @ Setup for better waitstates (not needed in emulation, but might be necessary on hardware?)
+	LDR	r1, =0x4017
+	STRH	r1, [r0]
+
 .Lmain_LoadDesign:
 0:	LDR	r0, =0x06000000
 	LDR	r1, =BgDesign_Gfx
@@ -123,8 +127,6 @@ main:
 	MVN	r1, r0    @ Any interrupt
 	SWI	0x04
 	B	1b
-.Lbxr5:	BX	r5
-.Lbxr6:	BX	r6
 
 .Lmain_Copy32:
 1:	LDMIA	r1!, {r3}
@@ -205,22 +207,28 @@ UpdateGfx:
 	LDR	r1, =0x10100E46
 	STR	r1, [r0, #0x50]!       @ Add BG1,BG2 over BG1,BG2,BG3
 0:	LDRH	r5, [r0, #0x0104-0x50] @ Get SmpPos from timer -> r5
-	LDRB	ip, [r4, #0x02]
-	SUB	r5, r5, #0x010000+BLOCK_SIZE @ Adjust for double buffer
-	ADD	r5, r5, ip, lsl #BLOCK_SIZE_LOG2
+	LDRB	ip, [r4, #0x02]   @ RdBufIdx -> ip
+	LDR	sl, [r4, #0x10]   @ BlockSize -> sl
+	SUB	r5, r5, #0x010000 @ Adjust for double buffer
+	SUB	r5, r5, sl
+	MLA	r5, sl, ip, r5
 
 .LRedraw_Clear:
 1:	LDR	r0, =GLYPHS_TILEADR + ((TITLE1_Y/8)*32)*2
 	MOV	r1, #0x00
-	MOV	r2, #0x20*2*2 @ Clear Title1/Title2
+	MOV	r2, #0x02*32*2 @ Text + Reflection
+	BL	.LRedraw_Set32
+	LDR	r0, =GLYPHS_TILEADR + ((TITLE2_Y/8)*32)*2
+	MOV	r1, #0x00
+	MOV	r2, #0x02*32*2
 	BL	.LRedraw_Set32
 	LDR	r0, =GLYPHS_TILEADR + ((TITLE3_Y/8)*32)*2
 	MOV	r1, #0x00
-	MOV	r2, #0x20*2
+	MOV	r2, #0x02*32*2
 	BL	.LRedraw_Set32
 1:	LDR	r0, =GRAPHL_TILEADR
 	MOV	r1, #0x00
-	MOV	r2, #GRAPH_NTILES * 32 * 2 @ Clear L+R
+	MOV	r2, #0x20 * GRAPH_NTILES * 2 @ Clear L+R
 	BL	.LRedraw_Set32
 
 .LRedraw_DrawTitle:
@@ -236,15 +244,14 @@ UpdateGfx:
 
 .LRedraw_GetSamples:
 	LDR	r0, =.LRedraw_GraphDataL
-.if ULC_STEREO
-	MOV	r1, #(BLOCK_SIZE*2) >> 8             @ Distance to right channel
-	SUB	r1, r1, #GRAPH_W<<24
-.else
 	MOV	r1, #(-GRAPH_W)<<24
+.if ULC_STEREO
+	ADD	r1, r1, sl, lsr #0x08-1 @ Distance to right channel
 .endif
-	LDR	r3, =ulc_OutputBuffer + BLOCK_SIZE*2 @ End -> r3
-	ADD	r2, r3, r5                           @ Src -> r2
-	LDR	r4, [r4, #0x0C]
+	LDR	r3, =ulc_OutputBuffer   @ End -> r3
+	ADD	r3, r3, sl, lsl #0x01
+	ADD	r2, r3, r5              @ Src -> r2
+	LDR	r4, [r4, #0x08]
 	CMP	r4, #0x00
 	LDRNE	r4, [r4, #0x0C]
 	MOVEQ	r2, r3
@@ -258,8 +265,8 @@ UpdateGfx:
 1:	ADD	r5, r5, r4              @ [PosMu += Step]
 0:	LDRB	ip, [r2, r1, lsl #0x08] @ Abs[xR] -> ip
 	MOVS	ip, ip, lsl #0x18
-	RSB	lr, r7, ip, asr #0x18-8 @ LP_R = LP_R + (xR - LP_R)*1/32 (NOTE: 8.8fxp)
-	ADD	r7, r7, lr, asr #0x05
+	RSB	lr, r7, ip, asr #0x18-8 @ LP_R = LP_R + (xR - LP_R)*1/16 (NOTE: 8.8fxp)
+	ADD	r7, r7, lr, asr #0x04
 	MUL	lr, r7, r7              @ [15.16]
 	ADD	r9, r9, lr, lsr #0x05   @ PowR += LP_R (15.11fxp)
 	RSBMI	ip, ip, #0x00
@@ -269,8 +276,8 @@ UpdateGfx:
 	STRB	ip, [r0, #GRAPH_W]
 0:	LDRB	ip, [r2], r5, lsr #0x17 @ Abs[xL] -> ip, update position
 	MOVS	ip, ip, lsl #0x18
-	RSB	lr, r6, ip, asr #0x18-8 @ LP_L = LP_L + (xL - LP_L)*1/32
-	ADD	r6, r6, lr, asr #0x05
+	RSB	lr, r6, ip, asr #0x18-8 @ LP_L = LP_L + (xL - LP_L)*1/16
+	ADD	r6, r6, lr, asr #0x04
 	MUL	lr, r6, r6
 	ADD	r8, r8, lr, lsr #0x05   @ PowL += LP_L
 	RSBMI	ip, ip, #0x00
@@ -280,7 +287,7 @@ UpdateGfx:
 	STRB	ip, [r0], #0x01
 0:	BIC	r5, r5, #0x7F<<23       @ Clear integer part
 	CMP	r2, r3                  @ Wrap
-	SUBCS	r2, r2, #BLOCK_SIZE*2
+	SUBCS	r2, r2, sl, lsl #0x01
 0:	ADDS	r1, r1, #0x01<<24
 	BCC	1b
 2:	STR	r6, .LRedraw_LowPassL
@@ -391,7 +398,7 @@ UpdateGfx:
 	CMP	r3, #0x01
 	BCS	1b
 2:	SBCS	r2, r2, r1
-	BXCC	lr
+	BXEQ	lr
 	RSB	r2, r2, #0x1E
 	MOV	r2, r2, lsr #0x01
 	ADD	r0, r0, r2, lsl #0x01
@@ -418,17 +425,38 @@ UpdateGfx:
 	CMP	r6, #GRAPH_H/2
 	MOVHI	r6, #GRAPH_H/2
 	RSB	r8, r5, r5, lsl #0x04 @ Start at Fh (full opacity/brightness)
-0:	SUBS	r9, r6, #0x0F         @ Handle small bars
+	MOVS	r9, r8, lsr #0x10
+	BNE	.LRedraw_DrawGraphBarR
+
+.LRedraw_DrawGraphBarL:
+	SUBS	r9, r6, #0x0F @ Handle small bars
 	MULCC	r8, r5, r6
 	BLS	2f
-1:	LDR	ip, [r7]
+1:	LDRH	ip, [r7]
 	ORR	ip, ip, r8
-	STR	ip, [r7], #-0x04
+	STRH	ip, [r7], #-0x04
 	SUBS	r9, r9, #0x01
 	BNE	1b
-2:	LDR	r9, [r7]
+2:	LDRH	r9, [r7]
 	ORR	r9, r9, r8
-	STR	r9, [r7], #-0x04
+	STRH	r9, [r7], #-0x04
+	SUBS	r8, r8, r5
+	BHI	2b
+4:	BX	lr
+
+.LRedraw_DrawGraphBarR:
+	ADD	r7, r7, #0x02
+	SUBS	r9, r6, #0x0F
+	MULCC	r8, r5, r6
+	BLS	2f
+1:	LDRH	ip, [r7]
+	ORR	ip, ip, r8, lsr #0x10
+	STRH	ip, [r7], #-0x04
+	SUBS	r9, r9, #0x01
+	BNE	1b
+2:	LDRH	r9, [r7]
+	ORR	r9, r9, r8, lsr #0x10
+	STRH	r9, [r7], #-0x04
 	SUBS	r8, r8, r5
 	BHI	2b
 4:	BX	lr
