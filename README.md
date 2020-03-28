@@ -17,7 +17,7 @@ The player supports both mono and stereo files (requires a rebuild; mono/stereo(
 
 ## Acknowledgements
 * Special thanks to [No!ze Freakz](https://soundcloud.com/user-462957379) for permission to use their track 'Freedom' for demonstration purposes
-* Credit goes to [Da Tweekaz](https://soundcloud.com/datweekaz) for their remix of Eiffel 65's track 'Blue'
+* Credit goes to [Da Tweekaz](https://soundcloud.com/datweekaz) for their remix of Eiffel 65's track 'Blue', and their 10-years remix of 'People Against P*rn'
 * Credit goes to [DJ S3RL](https://djs3rl.com/) for their track 'Ravers MashUp'
 * Credit goes to [MANTIS](https://soundcloud.com/mantisdubstep) for their track 'Block Rocka'
 
