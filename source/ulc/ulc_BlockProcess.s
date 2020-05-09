@@ -41,7 +41,7 @@ ulc_BlockProcess:
 	MOVS	r0, r0, lsl #0x03
 	MOVNE	r7, r7, lsr r0
 	MOV	r8, #0x00       @ 0 -> r8
-	MOV	r9, #0x06C0     @ "MOV r0, r0, asr #0x18+4-15", lower HWord -> r9
+	MOV	r9, #0x0740     @ "MOV r0, r0, asr #0x18+5-15", lower HWord -> r9
 	LDR	sl, =ulc_TransformBuffer
 1:	AND	r0, r7, #0x0F   @ NextOverlap = BlockSize >> Nybble()
 	MOV	r0, fp, lsr r0
@@ -57,7 +57,7 @@ ulc_BlockProcess:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
 @ r8:  0
-@ r9:  0x06C0
+@ r9:  0x0740
 @ sl: &CoefDst
 @ fp:  BlockSize | -CoefRem<<16
 @ sp+00h: BlockSize
@@ -79,9 +79,9 @@ ulc_BlockProcess:
 0:	AND	r0, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
 	NextNybble
 	ADD	r0, r0, #0x0E
-	CMP	r0, #0x13             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
+	CMP	r0, #0x12             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
 	MOVCS	r0, #0x0020
-1:	ADDCC	r0, r9, r0, lsl #0x07 @ Form "MOV r0, r0, asr #0x0D+n", lower hword (06C0h + n<<7)
+1:	ADDCC	r0, r9, r0, lsl #0x07 @ Form "MOV r0, r0, asr #0x0E+n", lower hword (0740h + n<<7)
 	STRH	r0, .LDecodeCoefs_Normal_Shifter
 
 .LDecodeCoefs_DecodeLoop:
@@ -105,11 +105,13 @@ ulc_BlockProcess:
 	ANDS	r0, r7, #0x0F @ Quantizer change? (8h,0h,Xh)
 	BEQ	.LDecodeCoefs_ChangeQuant
 	NextNybble
-1:	CMP	r0, #0x0C     @ Short?
+1:	CMP	r0, #0x0E           @ 8h,1h..Dh: 4.. 28 zeros (Step: 2)
 	BCC	2f
-1:	ORR	r0, r0, r7, lsl #0x1C @ Long: 8h,Ch..Fh,Xh -> 26..152 zeros
-	MOV	r0, r0, ror #0x1C
-	ADD	r0, r0, #(26-2)/2 - (0xC<<4)
+	AND	r0, r7, #0x0F
+	MOVEQ	r0, r0, lsl #0x02-1 @ 8h,Eh,Xh: 30.. 90 zeros (Step: 4)
+	ADDEQ	r0, r0, #0x1E/2-1
+	MOVHI	r0, r0, lsl #0x03-1 @ 8h,Fh,Xh: 94..214 zeros (Step: 8)
+	ADDHI	r0, r0, #0x5E/2-1
 	NextNybble
 2:	ADD	fp, fp, r0, lsl #0x01+16 @ CoefRem -= (zR-1)*2
 	MOV	r1, #0x00
@@ -149,7 +151,7 @@ ulc_BlockProcess:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
 @ r8:  0
-@ r9:  0x06C0
+@ r9:  0x0740
 @ sl: &CoefBuf
 @ fp:  BlockSize
 @ ip:
