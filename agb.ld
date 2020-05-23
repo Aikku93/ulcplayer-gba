@@ -8,7 +8,7 @@ ENTRY(_entry)
 MEMORY {
 	ewram : ORIGIN = 0x02000000, LENGTH = 256K
 	iwram : ORIGIN = 0x03000000, LENGTH =  32K - 8 /* Exclude BIOS.IRQFlag,BIOS.IRQProc and stacks */
-	rom   : ORIGIN = 0x08000000, LENGTH = 128M
+	rom   : ORIGIN = 0x08000000, LENGTH =  32M     /* Cartridge size cannot exceed 32MiB; wraps around */
 }
 __ewram_beg__ = ORIGIN(ewram);
 __ewram_end__ = ORIGIN(ewram) + LENGTH(ewram);
