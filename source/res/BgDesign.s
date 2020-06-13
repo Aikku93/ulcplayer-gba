@@ -3,7 +3,7 @@
 .section .rodata
 .balign 4
 
-BgDesign_Gfx: @ 172 (design) + 95 (glyph) tiles
+BgDesign_Gfx: @ 172 (design) + 97 (glyph) tiles
 	.incbin "source/res/BgDesign.img.lz.bin"
 .size   BgDesign_Gfx, .-BgDesign_Gfx
 .global BgDesign_Gfx

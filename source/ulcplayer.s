@@ -39,7 +39,7 @@
 .equ BGDESIGN_TILEMAP, 31
 .equ BGDESIGN_NPAL16,   8
 
-.equ GLYPHS_NTILES,  95
+.equ GLYPHS_NTILES,  97
 .equ GLYPHS_TILEMAP, 30
 .equ GLYPHS_PAL16,    4
 .equ GLYPHS_TILEOFS, BGDESIGN_NTILES
@@ -476,19 +476,19 @@ UpdateGfx:
 .balign 4
 
 SoundFile:
-	.incbin "source/res/Eiffel 65 - Blue (Team Blue Radio Mix) (64kbps).ulc"
+	.incbin "source/res/No!ze Freakz - Freedom (64kbps).ulc"
 .size SoundFile, .-SoundFile
 
 SoundFile_Title1:
-	.asciz "Eiffel65"
+	.asciz "No!ze Freakz"
 .size SoundFile_Title1, .-SoundFile_Title1
 
 SoundFile_Title2:
-	.asciz "Blue"
+	.asciz "Freedom\x7F"
 .size SoundFile_Title2, .-SoundFile_Title2
 
 SoundFile_Title3:
-	.asciz "TeamBlue Mix"
+	.asciz ""
 .size SoundFile_Title3, .-SoundFile_Title3
 
 /**************************************/
