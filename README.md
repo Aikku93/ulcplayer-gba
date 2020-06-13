@@ -44,10 +44,13 @@ The player supports both mono and stereo files (requires a rebuild; mono/stereo(
 * [96kbps @ 32.768kHz (M/S stereo, 2.6MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/No!ze%20Freakz%20-%20Freedom%20(96kbps).gba)
 * [128kbps @ 32.768kHz (M/S stereo, 3.5MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/No!ze%20Freakz%20-%20Freedom%20(128kbps).gba)
 
+### (Q-Dance) Reverze 2020 - D-Block & S-te-Fan
+* [75kbps @ 32.768kHz (M/S stereo, 31.6MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/Reverze%202020%20-%20D-Block%20&%20S-te-Fan%20(75kbps).gba)
+
+### (Q-Dance) X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan
+* [79kbps @ 32.768Hz (M/S stereo, 31.9MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/X-Qlusive%202019%20-%20Da%20Tweekaz,%20D-Block%20&%20S-te-Fan%20(79kbps).gba)
+
 ### S3RL - Ravers MashUp
 * [64kbps @ 32.768kHz (M/S stereo, 1.9MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/S3RL%20-%20Ravers%20MashUp%20(64kbps).gba)
 * [96kbps @ 32.768kHz (M/S stereo, 2.9MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/S3RL%20-%20Ravers%20MashUp%20(96kbps).gba)
 * [128kbps @ 32.768kHz (M/S stereo, 3.8MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/S3RL%20-%20Ravers%20MashUp%20(128kbps).gba)
-
-### X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan
-* [79kbps @ 32.768Hz (M/S stereo, 31.9MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/X-Qlusive%202019%20-%20Da%20Tweekaz,%20D-Block%20&%20S-te-Fan%20(79kbps).gba)
