@@ -64,6 +64,9 @@ ulc_BlockProcess:
 @ sp+04h: BlockOverlap
 
 .LChannels_Loop:
+	MOV	r1, #0x00
+	MOV	r2, #0x00
+	MOV	r3, #0x00
 	SUB	fp, fp, fp, lsl #0x10
 	B	.LDecodeCoefs_Start
 
@@ -90,8 +93,8 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_Normal:
 	NextNybble
-	MOVS	r1, r0, asr #0x10 @ 4.12fxp
-	MULNE	r0, r1, r1        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
+	MOVS	ip, r0, asr #0x10 @ 4.12fxp
+	MULNE	r0, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
 	RSBMI	r0, r0, #0x00
 .LDecodeCoefs_Normal_Shifter:
 	MOV	r0, r0, asr #0x00 @ Coef=QCoef*2^(-24+16-Quant) -> r0 (NOTE: Self-modifying dequantization)
@@ -105,34 +108,35 @@ ulc_BlockProcess:
 	ANDS	r0, r7, #0x0F @ Quantizer change? (8h,0h,Xh)
 	BEQ	.LDecodeCoefs_ChangeQuant
 	NextNybble
-1:	CMP	r0, #0x0E           @ 8h,1h..Dh: 4.. 28 zeros (Step: 2)
-	BCC	2f
-	AND	r0, r7, #0x0F
-	MOVEQ	r0, r0, lsl #0x02-1 @ 8h,Eh,Xh: 30.. 90 zeros (Step: 4)
-	ADDEQ	r0, r0, #0x1E/2-1
-	MOVHI	r0, r0, lsl #0x03-1 @ 8h,Fh,Xh: 94..214 zeros (Step: 8)
-	ADDHI	r0, r0, #0x5E/2-1
+1:	CMP	r0, #0x0F           @ 8h,1h..Eh:   3.. 16 zeros
+	BNE	2f
+	AND	r0, r7, #0x0F       @ 8h,Fh,Yh,Xh: 17 .. 272 zeros
 	NextNybble
-2:	ADD	fp, fp, r0, lsl #0x01+16 @ CoefRem -= (zR-1)*2
-	MOV	r1, #0x00
-20:	STMIA	sl!, {r1,r8}
-	SUBS	r0, r0, #0x01
-	BCS	20b
-3:	ADDS	fp, fp, #0x02<<16 @ CoefRem -= 2? (because biased earlier)
-	BCC	.LDecodeCoefs_DecodeLoop
+	ORR	r0, r0, r7, lsl #0x1C
+	NextNybble
+	MOV	r0, r0, ror #0x1C
+	ADD	r0, r0, #0x11-2
+2:	ADD	r0, r0, #0x02
+	ADD	fp, fp, r0, lsl #0x10 @ CoefRem -= zR
+	MOVS	ip, r0, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
+	STRMI	r1, [sl], #0x04
+	STMCSIA	sl!, {r1-r2}
+	MOVS	r0, r0, lsr #0x02
+20:	STMNEIA	sl!, {r1-r3,r8}
+	SUBNES	r0, r0, #0x01
+	BNE	20b
+3:	CMP	fp, #0x010000
+	BCS	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
 .LDecodeCoefs_Stop:
-	MOV	r0, #0x00
-	MOV	r1, #0x00
-	MOV	r2, #0x00
-	RSB	ip, fp, #0x010000
-	MOVS	ip, ip, lsr #0x01+16
-	STRCS	r0, [sl], #0x04
-	MOVS	ip, ip, lsr #0x01
-	STMCSIA	sl!, {r0-r1}
-1:	STMNEIA	sl!, {r0-r2,r8}
-	SUBNES	ip, ip, #0x01
+	RSB	r0, fp, #0x010000
+	MOVS	r0, r0, lsr #0x01+16
+	STRCS	r1, [sl], #0x04
+	MOVS	r0, r0, lsr #0x01
+	STMCSIA	sl!, {r1-r2}
+1:	STMNEIA	sl!, {r1-r3,r8}
+	SUBNES	r0, r0, #0x01
 	BNE	1b
 2:	MOV	fp, fp, lsl #0x10 @ Clear CoefRem
 	MOV	fp, fp, lsr #0x10
