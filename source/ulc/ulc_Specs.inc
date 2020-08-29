@@ -1,5 +1,4 @@
 .equ MAX_BLOCK_SIZE_LOG2, 11
 .equ MAX_BLOCK_SIZE, (1 << MAX_BLOCK_SIZE_LOG2)
-.equ ULC_FILE_MAGIC, ('U' | 'L'<<8 | 'C'<<16 | 'g'<<24)
-.equ ULC_STEREO,      1
-.equ ULC_MIDSIDE_XFM, 1
+.equ ULC_FILE_MAGIC, ('U' | 'L'<<8 | 'C'<<16 | 'i'<<24)
+.equ ULC_STEREO_SUPPORT, 1

@@ -20,45 +20,86 @@ ulc_Init:
 	LSR	r3, r4, #MAX_BLOCK_SIZE_LOG2+1 @ Incompatible block size?
 	BNE	.LInit_Exit_Fail
 	LDR	r3, =0x077CB531
-	CMP	r2, #0x01+ULC_STEREO           @ Incompatible number of channels?
+.if ULC_STEREO_SUPPORT
+	SUB	r1, r2, #0x01                  @ Incompatible number of channels?
+	MOV	ip, r1                         @ [IsStereo -> ip]
+	CMP	r1, #0x02-1
+	BHI	.LInit_Exit_Fail
+.else
+	CMP	r2, #0x01
 	BNE	.LInit_Exit_Fail
+.endif
 	MUL	r3, r4                         @ Log2(BlockSize) -> r2
 	LDR	r2, =_IRQProc_Log2Tab
 	LSR	r3, #0x20-5
 	LDRB	r2, [r2, r3]
 	LDR	r3, [r0, #0x08]                @ File.nSamp -> r3
 	LDR	r1, =ulc_State
-	ADD	r3, r4                         @ State.nBlkRem = File.nSamp/BlockSize + 1
+	ADD	r3, r4                         @ State.nBlkRem = (File.nSamp+BlockSize-1)/BlockSize + 1 + 1
+	SUB	r3, #0x01
 	LSR	r3, r2
+	ADD	r3, #0x02-1                    @ NOTE: -1 because we count by using the -CS condition
+	LSL	r3, #0x02                      @ WrBufIdx=0 | Pause=0
 	MOV	r2, #0x00
-	STMIA	r1!, {r2,r3}                   @ WrBufIdx = 0, nBufProc = 0, RdBufIdx = 0
+	STMIA	r1!, {r2,r3}                   @ RdBufIdx = 0,nBufProc = 0,OverlapSize = 0, store WrBufIdx|nBlkRem<<1
 	MOV	r2, #0x18                      @ State.NextData    = File.SkipHeader()
 	ADD	r2, r0
-	STMIA	r1!, {r0,r2,r4}                @ State.SoundFile   = File, State.BlockSize = BlockSize
-	STR	r4, [r1]                       @ State.NextOverlap = BlockSize (not important, as long as 2^(4+n))
-1:	LDR	r1, [r0, #0x0C]                @ Period = HW_RATE / RateHz -> r0
+	STMIA	r1!, {r0,r2}                   @ State.SoundFile   = File, State.NextData = File.SkipHeader()
+.if ULC_STEREO_SUPPORT
+	ADD	r4, r4                         @ IsStereo | BlockSize<<1 -> r4
+	ADD	r4, ip
+.endif
+1:	LDR	r1, [r0, #0x0C]                @ Period = Ceil[HW_RATE / RateHz] -> r0
 	MOV	r0, #0x01
 	LSL	r0, #0x18
+	SUB	r0, #0x01
 	BL	__aeabi_uidiv
+	@ADD	r0, #0x01                      @ <- Account for this later
+
+.LInit_ClearBuffers:
+	PUSH	{r0}
+	LDR	r0, =.LInit_ZeroWord
+	LDR	r1, =ulc_OutputBuffer
+	LDR	r2, =(((0x01 * MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
+	SWI	0x0C
+	LDR	r0, =.LInit_ZeroWord
+	LDR	r1, =ulc_LappingBuffer
+	LDR	r2, =((0x04 * (MAX_BLOCK_SIZE/2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
+	SWI	0x0C
+	POP	{r0}
 
 .LInit_SetupHardware:
+.if ULC_STEREO_SUPPORT
+	LDR	r1, =0x04000080    @ &SOUNDCNT -> r1
+	LDR	r2, =_IRQTable
+	LSR	r4, #0x01          @ IsStereo? (and restore BlockSize -> r4)
+	BCS	2f
+1:	LDR	r3, =ulc_TM1Proc_1ch
+	STR	r3, [r2, #0x04*4]  @ Set TM1 (BufferEnd) interrupt handler
+	LDR	r2, =0x0B04        @ FIFOA 100%,             FIFOA -> L, FIFOA -> R, FIFOA reset
+	B	3f
+2:	LDR	r3, =ulc_TM1Proc_2ch
+	STR	r3, [r2, #0x04*4]
+	LDR	r2, =0x9A0C        @ FIFOB 100%, FIFOB 100%, FIFOA -> L, FIFOB -> R, FIFOA reset, FIFOB reset
+3:
+.else
 	LDR	r2, =_IRQTable     @ Set TM1 (BufferEnd) interrupt handler
-	LDR	r3, =ulc_TM1Proc
+	LDR	r3, =ulc_TM1Proc_1ch
 	LDR	r1, =0x04000080    @ &SOUNDCNT -> r1
 	STR	r3, [r2, #0x04*4]
-.if ULC_STEREO
-	LDR	r2, =0x9A0C        @ FIFOB 100%, FIFOB 100%, FIFOA -> L, FIFOB -> R, FIFOA reset, FIFOB reset
-.else
 	LDR	r2, =0x0B04        @ FIFOA 100%,             FIFOA -> L, FIFOA -> R, FIFOA reset
 .endif
 	STR	r1, [r1, #0x04]    @ Master enable for audio (Bit7)
 	STRH	r2, [r1, #0x02]    @ Store DMA audio control
+.if ULC_STEREO_SUPPORT
+	MOV	ip, r2             @ Save DMA audio control -> ip
+.endif
 1:	ADD	r1, #0x0100-0x80   @ &TM0 -> r1
 	MOV	r2, #0x81          @ TM0 = ENABLE, Period = HW_RATE / RateHz
-	LSL	r2, #0x10
+	LSL	r2, #0x10          @ [C=0]
 	STRH	r2, [r1, #0x02]    @ [TM0CNT = 0, safety]
 	STRH	r2, [r1, #0x06]    @ [TM1CNT = 0, safety]
-	SUB	r2, r0
+	SBC	r2, r0             @ [this completes the ceiling division by adding 1 to the off-by-one result]
 	MOV	r3, #0xC5          @ TM1 = ENABLE|IRQ|SLAVE, Period = BlockSize
 	LSL	r3, #0x10
 	SUB	r3, r4
@@ -77,12 +118,16 @@ ulc_Init:
 	LSL	r3, #0x18
 	STRH	r3, [r1, #0x0A]    @ [CNT_H=0, safety]
 	STMIA	r1!, {r0,r2,r3}
-.if ULC_STEREO
-	ADD	r0, r4             @ Double-buffered, so skip two buffers for the right channel
-	ADD	r0, r4
+.if ULC_STEREO_SUPPORT
+	MOV	r4, ip             @ Stereo has DMA bit 15 set
+	LSR	r4, #0x0F
+	BEQ	1f
+0:	LSL	r4, #MAX_BLOCK_SIZE_LOG2+1
 	ADD	r2, #0x04          @ DMA2.Dst = &FIFOB -> r2
+	ADD	r0, r4             @ Advance source to the right-channel buffer
 	STRH	r3, [r1, #0x0A]
 	STMIA	r1!, {r0,r2,r3}
+1:
 .endif
 
 .LInit_Exit_Okay:
@@ -97,6 +142,9 @@ ulc_Init:
 	POP	{r3}
 	BX	r3
 
+.balign 4
+.LInit_ZeroWord: .word 0
+
 /**************************************/
 .size   ulc_Init, .-ulc_Init
 .global ulc_Init
@@ -107,10 +155,10 @@ ulc_Init:
 
 .thumb
 .thumb_func
-ulc_TM1Proc:
+ulc_TM1Proc_1ch:
 	LDR	r0, =ulc_State
 	MOV	r2, #0x01
-	LDRB	r1, [r0, #0x02] @ RdBufIdx ^= 1?
+	LDRB	r1, [r0, #0x00] @ RdBufIdx ^= 1?
 	EOR	r2, r1
 	BNE	2f
 1:	LSL	r1, #0x1A       @ &REG_BASE -> r1
@@ -118,43 +166,63 @@ ulc_TM1Proc:
 	LDRH	r3, [r1, #0x00] @ DMA1.CNT_H(=B600h) -> r3
 	STRH	r2, [r1, #0x00] @ DMA1.CNT_H = 0
 	STRH	r3, [r1, #0x00] @ Restart DMA1
-.if ULC_STEREO
-	STRH	r2, [r1, #0x0C] @ DMA2.CNT_H = 0
-	STRH	r3, [r1, #0x0C] @ Restart DMA2
-.endif
 2:	LDRB	r1, [r0, #0x01] @ nBufProc++
-	STRB	r2, [r0, #0x02]
+	STRB	r2, [r0, #0x00]
 	ADD	r1, #0x01
 	STRB	r1, [r0, #0x01]
 	BX	lr
 
 /**************************************/
-.size ulc_TM1Proc, .-ulc_TM1Proc
+.size ulc_TM1Proc_1ch, .-ulc_TM1Proc_1ch
+/**************************************/
+.if ULC_STEREO_SUPPORT
+/**************************************/
+
+.thumb
+.thumb_func
+ulc_TM1Proc_2ch:
+	LDR	r0, =ulc_State
+	MOV	r2, #0x01
+	LDRB	r1, [r0, #0x00] @ RdBufIdx ^= 1?
+	EOR	r2, r1
+	BNE	2f
+1:	LSL	r1, #0x1A       @ &REG_BASE -> r1
+	ADD	r1, #0xC6       @ &DMA1.CNT_H -> r1
+	LDRH	r3, [r1, #0x00] @ DMA1.CNT_H(=B600h) -> r3
+	STRH	r2, [r1, #0x00] @ DMA1.CNT_H = 0
+	STRH	r3, [r1, #0x00] @ Restart DMA1
+	STRH	r2, [r1, #0x0C] @ DMA2.CNT_H = 0
+	STRH	r3, [r1, #0x0C] @ Restart DMA2
+2:	LDRB	r1, [r0, #0x01] @ nBufProc++
+	STRB	r2, [r0, #0x00]
+	ADD	r1, #0x01
+	STRB	r1, [r0, #0x01]
+	BX	lr
+
+/**************************************/
+.size ulc_TM1Proc_2ch, .-ulc_TM1Proc_2ch
+/**************************************/
+.endif
 /**************************************/
 .section .sbss
 .balign 4
 /**************************************/
 
 ulc_State:
-	.byte 0 @ [00h]  WrBufIdx
-	.byte 0 @ [01h]  nBufProc
-	.byte 0 @ [02h]  RdBufIdx
-	.byte 0 @ [03h]
-	.word 0 @ [04h]  nBlkRem
-	.word 0 @ [08h] &SoundFile
-	.word 0 @ [0Ch] &NextData
-	.word 0 @ [10h]  BlockSize
-	.word 0 @ [14h]  NextOverlap
+	.byte  0 @ [00h]  RdBufIdx
+	.byte  0 @ [01h]  nBufProc
+	.hword 0 @ [02h]  OverlapSize
+	.word  0 @ [04h]  WrBufIdx | Pause<<1 | nBlkRem<<2
+	.word  0 @ [08h] &SoundFile
+	.word  0 @ [0Ch] &NextData
 .size   ulc_State, .-ulc_State
 .global ulc_State
 
 /**************************************/
 
 ulc_OutputBuffer:
-	.space 0x01 * 2*MAX_BLOCK_SIZE @ Double-buffered output
-.if ULC_STEREO
-	.space 0x01 * 2*MAX_BLOCK_SIZE
-.endif
+	.space (0x01 * MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT) @ Double-buffered output
+
 .size   ulc_OutputBuffer, .-ulc_OutputBuffer
 .global ulc_OutputBuffer
 
