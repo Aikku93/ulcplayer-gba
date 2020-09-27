@@ -16,7 +16,7 @@ The player supports both mono and stereo files and any block size up to 2048.
 * **Ruben Nunez** - *Initial work* - [Aikku93](https://github.com/Aikku93)
 
 ## Acknowledgements
-* Special thanks to [No!ze Freakz](https://soundcloud.com/user-462957379) for permission to use their track 'Freedom' for demonstration purposes
+* Special thanks to [No!ze Freakz](https://www.youtube.com/user/SrPojallapimo) for permission to use their track 'Freedom' for demonstration purposes
 * Credit goes to the following other artists:
   * [Adrenalize](https://www.adrenalizedj.com/)
   * [B-Front](https://www.djbfront.nl/)
@@ -45,9 +45,9 @@ The player supports both mono and stereo files and any block size up to 2048.
 ### Hardstyle Volume 1
 
 Files:
-* [64kbps @ 32.768kHz (M/S stereo, 15.3MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%201%20(64kbps).gba)
-* [96kbps @ 32.768kHz (M/S stereo, 23.0MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%201%20(96kbps).gba)
-* [128kbps @ 32.768kHz (M/S stereo, 30.7MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%201%20(128kbps).gba)
+* [64kbps @ 32.768kHz (M/S stereo, 15.3MiB)](http://www.mediafire.com/file/4i3jn05snafi8u0/file)
+* [96kbps @ 32.768kHz (M/S stereo, 23.0MiB)](http://www.mediafire.com/file/6pf02oh3ki3he0u/file)
+* [128kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/vkhgx77vb7kthkj/file)
 
 Featuring:
 * B-Front & Adrenalize - Above Heaven
@@ -62,9 +62,9 @@ Featuring:
 ### Hardstyle Volume 2
 
 Files:
-* [64kbps @ 32.768kHz (M/S stereo, 15.1MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%202%20(64kbps).gba)
-* [96kbps @ 32.768kHz (M/S stereo, 22.7MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%202%20(96kbps).gba)
-* [128kbps @ 32.768kHz (M/S stereo, 30.3MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%202%20(128kbps).gba)
+* [64kbps @ 32.768kHz (M/S stereo, 15.1MiB)](http://www.mediafire.com/file/k1tpdtzahyczga8/file)
+* [96kbps @ 32.768kHz (M/S stereo, 22.6MiB)](http://www.mediafire.com/file/d3lol2s6z4jdri0/file)
+* [128kbps @ 32.768kHz (M/S stereo, 30.2MiB)](http://www.mediafire.com/file/05hryp4dv3brkyh/file)
 
 Featuring:
 * Mark With a K - See Me Now (Da Tweekaz Extended Remix)
@@ -78,9 +78,9 @@ Featuring:
 ### Hardstyle Volume 3
 
 Files:
-* [64kbps @ 32.768kHz (M/S stereo, 14.3MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%203%20(64kbps).gba)
-* [96kbps @ 32.768kHz (M/S stereo, 21.4MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%203%20(96kbps).gba)
-* [128kbps @ 32.768kHz (M/S stereo, 28.6MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Volume%203%20(128kbps).gba)
+* [64kbps @ 32.768kHz (M/S stereo, 14.3MiB)](http://www.mediafire.com/file/391mpb9k2sy2gcn/file)
+* [96kbps @ 32.768kHz (M/S stereo, 21.4MiB)](http://www.mediafire.com/file/uz4v86goll9d5mc/file)
+* [128kbps @ 32.768kHz (M/S stereo, 28.6MiB)](http://www.mediafire.com/file/oj9zobmzlqkouam/file)
 
 Featuring:
 * S3RL - Fan Service
@@ -93,23 +93,28 @@ Featuring:
 * S3RL vs Auscore - Green Hills 2017
 * The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg)
 
+### S3RL - S3RL Always Presents...
+
+Files:
+* [96kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/q80g8h9iuppwczl/file)
+
 ### (Q-Dance) Reverze 2018 - Da Tweekaz
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 31.8MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Q-Dance%20-%20Reverze%202018%20-%20Da%20Tweekaz.gba)
+* [96kbps @ 32.768kHz (M/S stereo, 31.8MiB)](http://www.mediafire.com/file/03rwmaz4t8vorp6/file)
 
 ### (Q-Dance) Reverze 2018 - Ran-D
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 29.1MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Q-Dance-%20%20Reverze%202018%20-%20Ran-D.gba)
+* [96kbps @ 32.768kHz (M/S stereo, 29.1MiB)](http://www.mediafire.com/file/ptny43ma3sibrjq/file)
 
 ### (Q-Dance) Reverze 2020 - D-Block & S-te-Fan
 
 Files:
-* [75kbps @ 32.768kHz (M/S stereo, 31.5MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Q-Dance%20-%20Reverze%202020%20-%20D-Block%20&%20S-te-Fan.gba)
+* [75kbps @ 32.768kHz (M/S stereo, 31.5MiB)](http://www.mediafire.com/file/aotfs28rbv8t1vx/file)
 
 ### (Q-Dance) X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan
 
 Files:
-* [79kbps @ 32.768Hz (M/S stereo, 31.8MiB)](https://github.com/Aikku93/ulcplayer-gba-prebuilt/raw/master/ulc%20Player%20GBA%20-%20Q-Dance%20-%20X-Qlusive%202019%20-%20Da%20Tweekaz,%20D-Block%20&%20S-te-Fan.gba)
+* [79kbps @ 32.768Hz (M/S stereo, 31.8MiB)](http://www.mediafire.com/file/oh6b7lw274bkldc/file)
 
