@@ -2,3 +2,4 @@
 .equ MAX_BLOCK_SIZE, (1 << MAX_BLOCK_SIZE_LOG2)
 .equ ULC_FILE_MAGIC, ('U' | 'L'<<8 | 'C'<<16 | 'i'<<24)
 .equ ULC_STEREO_SUPPORT, 1
+.equ ULC_ALLOW_PITCH_SHIFT, 1

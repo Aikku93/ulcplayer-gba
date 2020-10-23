@@ -364,6 +364,80 @@ ulc_BlockProcess:
 	MOVCS	r8, r8, lsr r9        @  Y: NextOverlapSize = SubBlockSize >> OverlapScale
 	ORR	r7, r8, r7, lsl #0x10 @  N: NextOverlapSize = SubBlockSize
 
+/**************************************/
+.if ULC_ALLOW_PITCH_SHIFT
+/**************************************/
+
+@ No point in optimizing this too much, since it is mostly a gimmick.
+@ Shifting down takes 4.47% CPU @ 32768Hz stereo
+@ Shifting up takes 4.25% CPU @ 32768Hz stereo
+
+.LDecodeCoefs_SubBlockLoop_PitchShift:
+	LDR	ip, ulc_PitchShiftKey
+	ADR	lr, .LDecodeCoefs_SubBlockLoop_PitchShift_KeyScale + 0x04*12
+	LDR	r1, [lr, ip, lsl #0x02] @ Stp = 2^(-Key/12) [.14fxp] << 16 | Pos(=0)
+	MOV	r2, sl                  @ Src
+	MOV	r3, sl                  @ Dst
+0:	CMP	r1, #0x01<<14
+	BEQ	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+	MOV	r0, r9, lsr #0x10       @ BlockSize -> r0
+	BCC	.LDecodeCoefs_SubBlockLoop_PitchShift_Up
+
+.LDecodeCoefs_SubBlockLoop_PitchShift_Down:
+	ADD	sl, sl, r0, lsl #0x02
+1:	ADD	r1, r1, r1, lsl #0x10
+	MOV	lr, r1, lsr #0x10+14
+	LDR	ip, [r2], lr, lsl #0x02
+	BIC	r1, r1, lr, lsl #0x10+14
+	CMP	r2, sl
+	STR	ip, [r3], #0x04
+	BCC	1b
+2:	MOV	ip, #0x00
+	MOV	lr, #0x00
+	SUB	r2, sl, r3
+	MOVS	r2, r2, lsr #0x01+2
+	STRCS	ip, [r3], #0x04
+	MOVS	r2, r2, lsr #0x01
+22:	STMNEIA	r3!, {ip,lr}
+	SUBNES	r2, r2, #0x01
+	BNE	22b
+3:	MOV	r0, r9, lsr #0x10 @ Buffer points to End, so rewind it
+	SUB	sl, sl, r0, lsl #0x02
+	B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+
+ulc_PitchShiftKey: .word 0
+.size   ulc_PitchShiftKey, .-ulc_PitchShiftKey
+.global ulc_PitchShiftKey
+
+.LDecodeCoefs_SubBlockLoop_PitchShift_KeyScale: @ Floor[Table[2^(14-n/12), {n,-12,+12}] + 0.5]
+	.word 0x8000,0x78D1,0x7209,0x6BA2,0x6598
+	.word 0x5FE4,0x5A82,0x556E,0x50A3,0x4C1C
+	.word 0x47D6,0x43CE,0x4000,0x3C68,0x3904
+	.word 0x35D1,0x32CC,0x2FF2,0x2D41,0x2AB7
+	.word 0x2851,0x260E,0x23EB,0x21E7,0x2000
+
+@ Iterate backwards to avoid reading overwritten data
+.LDecodeCoefs_SubBlockLoop_PitchShift_Up:
+	MUL	ip, r1, r0
+	ADD	r3, r3, r0, lsl #0x02
+	MOV	lr, ip, lsr #0x0E
+	ADD	r2, r2, lr, lsl #0x02
+	MOV	r1, r1, lsl #0x10-14
+	SUB	r1, r1, r1, lsl #0x10
+1:	ADDS	r1, r1, r1, lsl #0x10
+	LDRCS	ip, [r2, #-0x04]!
+	MOVCC	ip, #0x00
+	STR	ip, [r3, #-0x04]!
+	CMP	r3, sl
+	BHI	1b
+2:	@B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+
+.LDecodeCoefs_SubBlockLoop_PitchShiftComplete:
+
+/**************************************/
+.endif
+/**************************************/
+
 .LDecodeCoefs_SubBlockLoop_IMDCT:
 	MOV	r0, sl @ Undo DCT-IV
 	ADD	r1, sl, #0x04*MAX_BLOCK_SIZE @ <- In TempBuffer
