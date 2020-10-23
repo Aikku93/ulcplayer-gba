@@ -96,7 +96,7 @@ Featuring:
 ### S3RL - S3RL Always Presents...
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/q80g8h9iuppwczl/file)
+* [100kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/q80g8h9iuppwczl/file)
 
 ### (Q-Dance) Reverze 2018 - Da Tweekaz
 
@@ -106,7 +106,7 @@ Files:
 ### (Q-Dance) Reverze 2018 - Ran-D
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 29.1MiB)](http://www.mediafire.com/file/ptny43ma3sibrjq/file)
+* [105kbps @ 32.768kHz (M/S stereo, 29.1MiB)](http://www.mediafire.com/file/ptny43ma3sibrjq/file)
 
 ### (Q-Dance) Reverze 2020 - D-Block & S-te-Fan
 
