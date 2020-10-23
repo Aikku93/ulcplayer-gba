@@ -202,6 +202,12 @@ main:
 0:	STR	r3, [r2, #0x08*BUTTON_PLAY_OBJ + 0x04]
 
 .LMainLoop_ProcessButtons:
+.if ULC_ALLOW_PITCH_SHIFT
+	LSR	r1, r0, #0x06+1 @ Pitch up? (Up)
+	BCS	.LMainLoop_PitchUp
+	LSR	r1, r0, #0x07+1 @ Pitch down? (Down)
+	BCS	.LMainLoop_PitchDown
+.endif
 	LSR	r1, r0, #0x09+1 @ Previous song? (SL)
 	BCS	.LMainLoop_PreviousSong
 	LSR	r1, r0, #0x08+1 @ Next song? (SR)
@@ -245,6 +251,24 @@ main:
 	MVN	r1, r0    @ Any interrupt
 	SWI	0x04
 	B	.LMainLoop
+
+.LMainLoop_PitchUp:
+	LDR	r0, =ulc_PitchShiftKey
+	LDR	r1, [r0]
+	CMP	r1, #0x0C
+	BGE	.LMainLoop_ProcessState
+	ADD	r1, #0x01
+	STR	r1, [r0]
+	B	.LMainLoop_ProcessState
+
+.LMainLoop_PitchDown:
+	LDR	r0, =ulc_PitchShiftKey
+	LDR	r1, [r0]
+	ADD	r1, #0x0C-1
+	BLT	.LMainLoop_ProcessState
+	SUB	r1, #0x0C
+	STR	r1, [r0]
+	B	.LMainLoop_ProcessState
 
 .LMainLoop_PauseSong:
 	LDR	r0, [r4, #0x04] @ Toggle Pause flag
@@ -952,7 +976,7 @@ SoundFiles:
 	.LSoundFiles_OriginSongName:
 	.LSoundFiles_Track25_Name: .asciz "Q-Dance: Reverze 2018 - Ran-D"
 
-	.balign 4; .LSoundFiles_Track25_Data: .incbin "source/music/Reverze 2018 - Ran-D (96kbps).ulc"
+	.balign 4; .LSoundFiles_Track25_Data: .incbin "source/music/Reverze 2018 - Ran-D (105kbps).ulc"
 .endif
 .if VOLUME == 6
 	.word 1
@@ -979,7 +1003,7 @@ SoundFiles:
 	.LSoundFiles_OriginSongName:
 	.LSoundFiles_Track28_Name: .asciz "S3RL - S3RL Always Presents\x7F"
 
-	.balign 4; .LSoundFiles_Track28_Data: .incbin "source/music/S3RL Always Presents (96kbps).ulc"
+	.balign 4; .LSoundFiles_Track28_Data: .incbin "source/music/S3RL Always Presents (100kbps).ulc"
 .endif
 
 .size SoundFiles, .-SoundFiles
