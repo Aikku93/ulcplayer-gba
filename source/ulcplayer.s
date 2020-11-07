@@ -484,7 +484,7 @@ VBlankIRQ:
 	ADD	fp, fp, #0x08
 	LDMIA	fp, {r1,r8,sl}         @ nSmp = File.nSamp -> r1, RateHz -> r8, BlockSize -> sl
 	LDR	r2, [r4, #0x04]        @ WrBufIdx | Pause<<1 | (nBlkRem-1)<<2 -> r2
-	RSB	r5, r5, #0x010000      @ SmpPos = BlockSize - (1<<16)-TimerVal
+	RSB	r5, r5, #0x010000      @ SmpPos = BlockSize - ((1<<16)-TimerVal)
 	RSB	r5, r5, sl
 	MLA	r5, sl, ip, r5         @ SmpPos += RdBufIdx*BlockSize (adjust for double buffer)
 	MVN	r2, r2, lsr #0x02      @ -SmpRem = -nBlkRem*BlockSize + SmpPos -> r3 (nBlkRem is pre-decremented, so add 1)
@@ -859,9 +859,8 @@ VBlankIRQ:
 /**************************************/
 
 @ Music is split into volumes and bitrates
-@ This hacky equ/macro sequence is used to avoid having to rename everything for rebuilding
-.equ VOLUME, 1
-.equ DIRSRC, ""
+@ This hacky macro sequence is used to avoid having to rename everything for rebuilding
+.equ BUILDVOLUME, 2
 .macro INCLUDE_FILE x
 	.incbin "source/music/128k/\x"
 .endm
@@ -870,140 +869,149 @@ VBlankIRQ:
 .balign 4
 
 SoundFiles:
-.if VOLUME == 1
+.if BUILDVOLUME == 1
 	.word 8 @ Number of tracks
-	.word .LSoundFiles_Track00_Data, .LSoundFiles_Track00_Name
-	.word .LSoundFiles_Track01_Data, .LSoundFiles_Track01_Name
-	.word .LSoundFiles_Track02_Data, .LSoundFiles_Track02_Name
-	.word .LSoundFiles_Track03_Data, .LSoundFiles_Track03_Name
-	.word .LSoundFiles_Track04_Data, .LSoundFiles_Track04_Name
-	.word .LSoundFiles_Track05_Data, .LSoundFiles_Track05_Name
-	.word .LSoundFiles_Track06_Data, .LSoundFiles_Track06_Name
-	.word .LSoundFiles_Track07_Data, .LSoundFiles_Track07_Name
+	.word 10f, 11f
+	.word 20f, 21f
+	.word 30f, 31f
+	.word 40f, 41f
+	.word 50f, 51f
+	.word 60f, 61f
+	.word 70f, 71f
+	.word 80f, 81f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track00_Name: .asciz "B-Front & Adrenalize - Above Heaven"
-	.LSoundFiles_Track01_Name: .asciz "Da Tweekaz - Jagermeister"
-	.LSoundFiles_Track02_Name: .asciz "Da Tweekaz - People Against Porn (10 Years Mix)"
-	.LSoundFiles_Track03_Name: .asciz "Da Tweekaz - Wodka"
-	.LSoundFiles_Track04_Name: .asciz "Da Tweekaz & Code Black - Shake Ya Shimmy"
-	.LSoundFiles_Track05_Name: .asciz "D-Block & S-te-Fan - Feel Inside"
-	.LSoundFiles_Track06_Name: .asciz "D-Block & S-te-Fan - Primal Energy (Defqon.1 2020 Anthem)"
-	.LSoundFiles_Track07_Name: .asciz "Eiffel 65 - Blue (Team Blue Radio Mix)"
+	11: .asciz "B-Front & Adrenalize - Above Heaven"
+	21: .asciz "Da Tweekaz - Jagermeister"
+	31: .asciz "Da Tweekaz - People Against Porn (10 Years Mix)"
+	41: .asciz "Da Tweekaz - Wodka"
+	51: .asciz "Da Tweekaz & Code Black - Shake Ya Shimmy"
+	61: .asciz "D-Block & S-te-Fan - Feel Inside"
+	71: .asciz "D-Block & S-te-Fan - Primal Energy (Defqon.1 2020 Anthem)"
+	81: .asciz "Eiffel 65 - Blue (Team Blue Radio Mix)"
 
-	.balign 4; .LSoundFiles_Track00_Data: INCLUDE_FILE "B-Front & Adrenalize - Above Heaven.ulc"
-	.balign 4; .LSoundFiles_Track01_Data: INCLUDE_FILE "Da Tweekaz - Jagermeister.ulc"
-	.balign 4; .LSoundFiles_Track02_Data: INCLUDE_FILE "Da Tweekaz - People Against Porn (10 Years Mix).ulc"
-	.balign 4; .LSoundFiles_Track03_Data: INCLUDE_FILE "Da Tweekaz - Wodka.ulc"
-	.balign 4; .LSoundFiles_Track04_Data: INCLUDE_FILE "Da Tweekaz & Code Black - Shake Ya Shimmy.ulc"
-	.balign 4; .LSoundFiles_Track05_Data: INCLUDE_FILE "D-Block & S-te-Fan - Feel Inside.ulc"
-	.balign 4; .LSoundFiles_Track06_Data: INCLUDE_FILE "D-Block & S-te-Fan - Primal Energy (Defqon.1 2020 Anthem).ulc"
-	.balign 4; .LSoundFiles_Track07_Data: INCLUDE_FILE "Eiffel 65 - Blue (Team Blue Radio Mix).ulc"
+	.balign 4; 10: INCLUDE_FILE "B-Front & Adrenalize - Above Heaven.ulc"
+	.balign 4; 20: INCLUDE_FILE "Da Tweekaz - Jagermeister.ulc"
+	.balign 4; 30: INCLUDE_FILE "Da Tweekaz - People Against Porn (10 Years Mix).ulc"
+	.balign 4; 40: INCLUDE_FILE "Da Tweekaz - Wodka.ulc"
+	.balign 4; 50: INCLUDE_FILE "Da Tweekaz & Code Black - Shake Ya Shimmy.ulc"
+	.balign 4; 60: INCLUDE_FILE "D-Block & S-te-Fan - Feel Inside.ulc"
+	.balign 4; 70: INCLUDE_FILE "D-Block & S-te-Fan - Primal Energy (Defqon.1 2020 Anthem).ulc"
+	.balign 4; 80: INCLUDE_FILE "Eiffel 65 - Blue (Team Blue Radio Mix).ulc"
 .endif
-.if VOLUME == 2
+.if BUILDVOLUME == 2
 	.word 7
-	.word .LSoundFiles_Track08_Data, .LSoundFiles_Track08_Name
-	.word .LSoundFiles_Track09_Data, .LSoundFiles_Track09_Name
-	.word .LSoundFiles_Track10_Data, .LSoundFiles_Track10_Name
-	.word .LSoundFiles_Track11_Data, .LSoundFiles_Track11_Name
-	.word .LSoundFiles_Track12_Data, .LSoundFiles_Track12_Name
-	.word .LSoundFiles_Track13_Data, .LSoundFiles_Track13_Name
-	.word .LSoundFiles_Track14_Data, .LSoundFiles_Track14_Name
+	.word 10f, 11f
+	.word 20f, 21f
+	.word 30f, 31f
+	.word 40f, 41f
+	.word 50f, 51f
+	.word 60f, 61f
+	.word 70f, 71f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track08_Name: .asciz "Mark With a K - See Me Now (Da Tweekaz Extended Remix)"
-	.LSoundFiles_Track09_Name: .asciz "No!ze Freakz - Freedom"
-	.LSoundFiles_Track10_Name: .asciz "Noisecontrollers - Crump (Ran-D Remix)"
-	.LSoundFiles_Track11_Name: .asciz "Noisecontrollers - Revolution Is Here (Original Mix)"
-	.LSoundFiles_Track12_Name: .asciz "Ran-D - Zombie"
-	.LSoundFiles_Track13_Name: .asciz "Ran-D & ANDY SVGE - Armageddon"
-	.LSoundFiles_Track14_Name: .asciz "Ran-D & Psyko Punkz Ft. K's Choice - Not An Addict"
+	11: .asciz "Mark With a K - See Me Now (Da Tweekaz Extended Remix)"
+	21: .asciz "No!ze Freakz - Freedom"
+	31: .asciz "Noisecontrollers - Crump (Ran-D Remix)"
+	41: .asciz "Noisecontrollers - Revolution Is Here (Original Mix)"
+	51: .asciz "Ran-D - Zombie"
+	61: .asciz "Ran-D & ANDY SVGE - Armageddon"
+	71: .asciz "Ran-D & Psyko Punkz Ft. K's Choice - Not An Addict"
 
-	.balign 4; .LSoundFiles_Track08_Data: INCLUDE_FILE "Mark With a K - See Me Now (Da Tweekaz Extended Remix).ulc"
-	.balign 4; .LSoundFiles_Track09_Data: INCLUDE_FILE "No!ze Freakz - Freedom.ulc"
-	.balign 4; .LSoundFiles_Track10_Data: INCLUDE_FILE "Noisecontrollers - Crump (Ran-D Remix).ulc"
-	.balign 4; .LSoundFiles_Track11_Data: INCLUDE_FILE "Noisecontrollers - Revolution Is Here (Original Mix).ulc"
-	.balign 4; .LSoundFiles_Track12_Data: INCLUDE_FILE "Ran-D - Zombie.ulc"
-	.balign 4; .LSoundFiles_Track13_Data: INCLUDE_FILE "Ran-D & ANDY SVGE - Armageddon.ulc"
-	.balign 4; .LSoundFiles_Track14_Data: INCLUDE_FILE "Ran-D & Psyko Punkz Ft. K's Choice - Not An Addict.ulc"
+	.balign 4; 10: INCLUDE_FILE "Mark With a K - See Me Now (Da Tweekaz Extended Remix).ulc"
+	.balign 4; 20: INCLUDE_FILE "No!ze Freakz - Freedom.ulc"
+	.balign 4; 30: INCLUDE_FILE "Noisecontrollers - Crump (Ran-D Remix).ulc"
+	.balign 4; 40: INCLUDE_FILE "Noisecontrollers - Revolution Is Here (Original Mix).ulc"
+	.balign 4; 50: INCLUDE_FILE "Ran-D - Zombie.ulc"
+	.balign 4; 60: INCLUDE_FILE "Ran-D & ANDY SVGE - Armageddon.ulc"
+	.balign 4; 70: INCLUDE_FILE "Ran-D & Psyko Punkz Ft. K's Choice - Not An Addict.ulc"
 .endif
-.if VOLUME == 3
+.if BUILDVOLUME == 3
 	.word 9
-	.word .LSoundFiles_Track15_Data, .LSoundFiles_Track15_Name
-	.word .LSoundFiles_Track16_Data, .LSoundFiles_Track16_Name
-	.word .LSoundFiles_Track17_Data, .LSoundFiles_Track17_Name
-	.word .LSoundFiles_Track18_Data, .LSoundFiles_Track18_Name
-	.word .LSoundFiles_Track19_Data, .LSoundFiles_Track19_Name
-	.word .LSoundFiles_Track20_Data, .LSoundFiles_Track20_Name
-	.word .LSoundFiles_Track21_Data, .LSoundFiles_Track21_Name
-	.word .LSoundFiles_Track22_Data, .LSoundFiles_Track22_Name
-	.word .LSoundFiles_Track23_Data, .LSoundFiles_Track23_Name
+	.word 10f, 11f
+	.word 20f, 21f
+	.word 30f, 31f
+	.word 40f, 41f
+	.word 50f, 51f
+	.word 60f, 61f
+	.word 70f, 71f
+	.word 80f, 81f
+	.word 90f, 91f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track15_Name: .asciz "S3RL - Fan Service"
-	.LSoundFiles_Track16_Name: .asciz "S3RL - Hentai"
-	.LSoundFiles_Track17_Name: .asciz "S3RL - MTC"
-	.LSoundFiles_Track18_Name: .asciz "S3RL - MTC2"
-	.LSoundFiles_Track19_Name: .asciz "S3RL - Ravers MashUp"
-	.LSoundFiles_Track20_Name: .asciz "S3RL feat Kayliana & MC Riddle - All That I Need"
-	.LSoundFiles_Track21_Name: .asciz "S3RL ft. Gl!tch - Cherry Pop"
-	.LSoundFiles_Track22_Name: .asciz "S3RL vs Auscore - Green Hills 2017"
-	.LSoundFiles_Track23_Name: .asciz "The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg)"
+	11: .asciz "S3RL - Fan Service"
+	21: .asciz "S3RL - Hentai"
+	31: .asciz "S3RL - MTC"
+	41: .asciz "S3RL - MTC2"
+	51: .asciz "S3RL - Ravers MashUp"
+	61: .asciz "S3RL feat Kayliana & MC Riddle - All That I Need"
+	71: .asciz "S3RL ft. Gl!tch - Cherry Pop"
+	81: .asciz "S3RL vs Auscore - Green Hills 2017"
+	91: .asciz "The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg)"
 
-	.balign 4; .LSoundFiles_Track15_Data: INCLUDE_FILE "S3RL - Fan Service.ulc"
-	.balign 4; .LSoundFiles_Track16_Data: INCLUDE_FILE "S3RL - Hentai.ulc"
-	.balign 4; .LSoundFiles_Track17_Data: INCLUDE_FILE "S3RL - MTC.ulc"
-	.balign 4; .LSoundFiles_Track18_Data: INCLUDE_FILE "S3RL - MTC2.ulc"
-	.balign 4; .LSoundFiles_Track19_Data: INCLUDE_FILE "S3RL - Ravers MashUp.ulc"
-	.balign 4; .LSoundFiles_Track20_Data: INCLUDE_FILE "S3RL feat Kayliana & MC Riddle - All That I Need.ulc"
-	.balign 4; .LSoundFiles_Track21_Data: INCLUDE_FILE "S3RL ft. Gl!tch - Cherry Pop.ulc"
-	.balign 4; .LSoundFiles_Track22_Data: INCLUDE_FILE "S3RL vs Auscore - Green Hills 2017.ulc"
-	.balign 4; .LSoundFiles_Track23_Data: INCLUDE_FILE "The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg).ulc"
+	.balign 4; 10: INCLUDE_FILE "S3RL - Fan Service.ulc"
+	.balign 4; 20: INCLUDE_FILE "S3RL - Hentai.ulc"
+	.balign 4; 30: INCLUDE_FILE "S3RL - MTC.ulc"
+	.balign 4; 40: INCLUDE_FILE "S3RL - MTC2.ulc"
+	.balign 4; 50: INCLUDE_FILE "S3RL - Ravers MashUp.ulc"
+	.balign 4; 60: INCLUDE_FILE "S3RL feat Kayliana & MC Riddle - All That I Need.ulc"
+	.balign 4; 70: INCLUDE_FILE "S3RL ft. Gl!tch - Cherry Pop.ulc"
+	.balign 4; 80: INCLUDE_FILE "S3RL vs Auscore - Green Hills 2017.ulc"
+	.balign 4; 90: INCLUDE_FILE "The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg).ulc"
 .endif
-.if VOLUME == 4
+.if BUILDVOLUME == 4
 	.word 1
-	.word .LSoundFiles_Track24_Data, .LSoundFiles_Track24_Name
+	.word 10f, 11f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track24_Name: .asciz "Q-Dance: Reverze 2018 - Da Tweekaz"
+	11: .asciz "Q-Dance: Defqon.1 Weekend Festival 2019 - Sefa"
 
-	.balign 4; .LSoundFiles_Track24_Data: .incbin "source/music/Reverze 2018 - Da Tweekaz (96kbps).ulc"
+	.balign 4; 10: .incbin "source/music/Defqon.1 Weekend Festival 2019 - Sefa (105kbps).ulc"
 .endif
-.if VOLUME == 5
+.if BUILDVOLUME == 5
 	.word 1
-	.word .LSoundFiles_Track25_Data, .LSoundFiles_Track25_Name
+	.word 10f, 11f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track25_Name: .asciz "Q-Dance: Reverze 2018 - Ran-D"
+	11: .asciz "Q-Dance: Reverze 2018 - Da Tweekaz"
 
-	.balign 4; .LSoundFiles_Track25_Data: .incbin "source/music/Reverze 2018 - Ran-D (105kbps).ulc"
+	.balign 4; 10: .incbin "source/music/Reverze 2018 - Da Tweekaz (96kbps).ulc"
 .endif
-.if VOLUME == 6
+.if BUILDVOLUME == 6
 	.word 1
-	.word .LSoundFiles_Track26_Data, .LSoundFiles_Track26_Name
+	.word 10f, 11f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track26_Name: .asciz "Q-Dance: Reverze 2020 - D-Block & S-te-Fan"
+	11: .asciz "Q-Dance: Reverze 2018 - Ran-D"
 
-	.balign 4; .LSoundFiles_Track26_Data: .incbin "source/music/Reverze 2020 - D-Block & S-te-Fan (75kbps).ulc"
+	.balign 4; 10: .incbin "source/music/Reverze 2018 - Ran-D (105kbps).ulc"
 .endif
-.if VOLUME == 7
+.if BUILDVOLUME == 7
 	.word 1
-	.word .LSoundFiles_Track27_Data, .LSoundFiles_Track27_Name
+	.word 10f, 11f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track27_Name: .asciz "Q-Dance: X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan"
+	11: .asciz "Q-Dance: Reverze 2020 - D-Block & S-te-Fan"
 
-	.balign 4; .LSoundFiles_Track27_Data: .incbin "source/music/X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan (79kbps).ulc"
+	.balign 4; 10: .incbin "source/music/Reverze 2020 - D-Block & S-te-Fan (75kbps).ulc"
 .endif
-.if VOLUME == 8
+.if BUILDVOLUME == 8
 	.word 1
-	.word .LSoundFiles_Track28_Data, .LSoundFiles_Track28_Name
+	.word 10f, 11f
 
 	.LSoundFiles_OriginSongName:
-	.LSoundFiles_Track28_Name: .asciz "S3RL - S3RL Always Presents\x7F"
+	11: .asciz "Q-Dance: X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan"
 
-	.balign 4; .LSoundFiles_Track28_Data: .incbin "source/music/S3RL Always Presents (100kbps).ulc"
+	.balign 4; 10: .incbin "source/music/X-Qlusive 2019 - Da Tweekaz, D-Block & S-te-Fan (79kbps).ulc"
+.endif
+.if BUILDVOLUME == 9
+	.word 1
+	.word 10f, 11f
+
+	.LSoundFiles_OriginSongName:
+	11: .asciz "S3RL - S3RL Always Presents\x7F"
+
+	.balign 4; 10: .incbin "source/music/S3RL Always Presents (100kbps).ulc"
 .endif
 
 .size SoundFiles, .-SoundFiles
