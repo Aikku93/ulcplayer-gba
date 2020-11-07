@@ -358,11 +358,12 @@ ulc_BlockProcess:
 	AND	r8, r6, #0x07         @ SubBlockSize = BlockSize >> DecimationPattern[SubBlockIdx] -> r8
 	MOV	r8, fp, lsr r8
 	ORR	r9, r9, r8, lsl #0x10 @ OverlapScale | SubBlockSize<<16 -> r9
-	CMP	r7, r8                @ OverlapSize > SubBlockSize?
-	MOVHI	r7, r8                @  OverlapSize = SubBlockSize
+	MOV	r7, r7, lsl #0x10     @ OverlapSize = NextOverlapSize
+	CMP	r7, r8, lsl #0x10     @ OverlapSize > SubBlockSize?
+	MOVHI	r7, r8, lsl #0x10     @  OverlapSize = SubBlockSize
 	MOVS	r6, r6, lsr #0x04     @ Advance subblock decimation. Transient subblock?
-	MOVCS	r8, r8, lsr r9        @  Y: NextOverlapSize = SubBlockSize >> OverlapScale
-	ORR	r7, r8, r7, lsl #0x10 @  N: NextOverlapSize = SubBlockSize
+	ORRCS	r7, r7, r8, lsr r9    @  Y: NextOverlapSize = SubBlockSize >> OverlapScale
+	ORRCC	r7, r7, r8            @  N: NextOverlapSize = SubBlockSize
 
 /**************************************/
 .if ULC_ALLOW_PITCH_SHIFT
