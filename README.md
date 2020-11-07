@@ -35,6 +35,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Eiffel 65](https://www.eiffel65.com/)
   * [Cranberries](https://www.cranberries.com/)
   * [Q-Dance](https://www.q-dance.com/) for:
+    * Defqon.1 Weekend Festival 2019 set featuring [Sefa](https://djsefa.com/)
     * Reverze 2018 set featuring [Da Tweekaz](http://datweekaz.com/)
     * Reverze 2018 set featuring [Ran-D](https://www.ran-d.com/)
     * Reverze 2020 set featuring [D-Block & S-te-Fan](https://www.dblock-stefan.com/)
@@ -47,7 +48,7 @@ The player supports both mono and stereo files and any block size up to 2048.
 Files:
 * [64kbps @ 32.768kHz (M/S stereo, 15.3MiB)](http://www.mediafire.com/file/4i3jn05snafi8u0/file)
 * [96kbps @ 32.768kHz (M/S stereo, 23.0MiB)](http://www.mediafire.com/file/6pf02oh3ki3he0u/file)
-* [128kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/vkhgx77vb7kthkj/file)
+* [128kbps @ 32.768kHz (M/S stereo, 30.7MiB)](http://www.mediafire.com/file/vkhgx77vb7kthkj/file)
 
 Featuring:
 * B-Front & Adrenalize - Above Heaven
@@ -93,10 +94,10 @@ Featuring:
 * S3RL vs Auscore - Green Hills 2017
 * The Script - Hall Of Fame (Dark Rehab Hardstyle Bootleg)
 
-### S3RL - S3RL Always Presents...
+### (Q-Dance) Defqon.1 Weekend Festival 2019 - Sefa
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 30.6MiB)](http://www.mediafire.com/file/q80g8h9iuppwczl/file)
+* [105kbps @ 32.768kHz (M/S stereo, 31.8MiB)](http://www.mediafire.com/file/esnkky4x8ps7jqe/file)
 
 ### (Q-Dance) Reverze 2018 - Da Tweekaz
 
@@ -106,7 +107,7 @@ Files:
 ### (Q-Dance) Reverze 2018 - Ran-D
 
 Files:
-* [96kbps @ 32.768kHz (M/S stereo, 29.1MiB)](http://www.mediafire.com/file/ptny43ma3sibrjq/file)
+* [105kbps @ 32.768kHz (M/S stereo, 31.9MiB)](http://www.mediafire.com/file/ptny43ma3sibrjq/file)
 
 ### (Q-Dance) Reverze 2020 - D-Block & S-te-Fan
 
@@ -117,4 +118,9 @@ Files:
 
 Files:
 * [79kbps @ 32.768Hz (M/S stereo, 31.8MiB)](http://www.mediafire.com/file/oh6b7lw274bkldc/file)
+
+### S3RL - S3RL Always Presents...
+
+Files:
+* [100kbps @ 32.768kHz (M/S stereo, 31.9MiB)](http://www.mediafire.com/file/q80g8h9iuppwczl/file)
 
