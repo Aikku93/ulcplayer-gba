@@ -46,8 +46,8 @@ ulc_BlockProcess:
 	SUBS	r1, r1, #0x01<<2          @ --nBlkRem?
 	BCC	.LNoBlocksRem
 	STR	r1, [r4, #0x04]
-0:	MOV	r9, #0x8700               @ "MOV r8, r8, asr #0x18+5-15" lower hword (=QScaleBase) -> r9
-	ORR	r9, r9, #0x48
+0:	MOV	r9, #0x8700               @ "MOV r8, r8, asr #0x18+5-14" lower hword (=QScaleBase) -> r9
+	ORR	r9, r9, #0xC8
 
 .LReadBlockHeader:
 	AND	r8, r7, #0x0F         @ QScaleBase | WindowCtrl<<16 -> r9
@@ -104,8 +104,8 @@ ulc_BlockProcess:
 0:	AND	r8, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
 	NextNybble
 	ADD	r8, r8, #0x0E
-	CMP	r8, #0x12             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
-	SUBCS	r8, r9, #0x0720
+	CMP	r8, #0x11             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
+	SUBCS	r8, r9, #0x07A0
 1:	ADDCC	r8, r9, r8, lsl #0x07 @ Modify the quantizer instruction
 	STRH	r8, .LDecodeCoefs_Normal_Shifter
 
@@ -113,13 +113,14 @@ ulc_BlockProcess:
 	SUBS	r8, r0, r7, lsl #0x1C    @ -QCoef -> r8?
 	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
 
+@ NOTE: Coefficients decoded to 15bit precision to avoid overflows during decoding
 .LDecodeCoefs_Normal:
 	NextNybble
 	MOVS	ip, r8, asr #0x10 @ 4.12fxp
 	MULNE	r8, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
 	RSBMI	r8, r8, #0x00
 .LDecodeCoefs_Normal_Shifter:
-	MOV	r8, r8, asr #0x00 @ Coef=QCoef*2^(-24+16-Quant) -> r8 (NOTE: Self-modifying dequantization)
+	MOV	r8, r8, asr #0x00 @ Coef=QCoef*2^(-24+14-Quant) -> r8 (NOTE: Self-modifying dequantization)
 	STR	r8, [sl], #0x04   @ Coefs[n++] = Coef
 	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
 	BCC	.LDecodeCoefs_DecodeLoop
@@ -564,10 +565,10 @@ ulc_PitchShiftKey: .word 0
 1:	SUBS	lr, lr, lr, lsl #0x10   @ -LapCopyRem = -LapCopy?
 	BCS	2f
 10:	LDMDB	r5!, {r0-r3}            @ *Dst++ = *--LapEnd
-	MOV	r0, r0, asr #0x08
-	MOV	r1, r1, asr #0x08
-	MOV	r2, r2, asr #0x08
-	MOV	r3, r3, asr #0x08
+	MOV	r0, r0, asr #0x07       @ NOTE: ASR #15-8, because the input is 15bit
+	MOV	r1, r1, asr #0x07
+	MOV	r2, r2, asr #0x07
+	MOV	r3, r3, asr #0x07
 	TEQ	r0, r0, lsl #0x18
 	EORMI	r0, r7, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
@@ -590,10 +591,10 @@ ulc_PitchShiftKey: .word 0
 	SUBS	lr, lr, r0, lsl #0x10
 	BCS	3f
 20:	LDMIA	r6!, {r0-r3}          @ *Dst++ = *SrcSmp++
-	MOV	r0, r0, asr #0x08
-	MOV	r1, r1, asr #0x08
-	MOV	r2, r2, asr #0x08
-	MOV	r3, r3, asr #0x08
+	MOV	r0, r0, asr #0x07
+	MOV	r1, r1, asr #0x07
+	MOV	r2, r2, asr #0x07
+	MOV	r3, r3, asr #0x07
 	TEQ	r0, r0, lsl #0x18
 	EORMI	r0, r7, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
