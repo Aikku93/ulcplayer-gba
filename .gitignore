@@ -1,5 +1,5 @@
 bin/*
 build/*
+source/music/*
 MemoryMap.txt
 ulcplayer.gba
-*.ulc
