@@ -6,7 +6,7 @@ Gameboy Advance player for [ulc-codec](https://github.com/Aikku93/ulc-codec).
 As a proof of concept of the decoding complexity of ulc-codec, a Gameboy Advance demonstration was made. CPU usage is around 60% for 32768Hz @ 128kbps (M/S stereo) (or 70% in high-precision mode). Note that this is entirely a proof of concept; decode time for N=4096 (default for encoding tools) is 2-3 frames, so usage in real applications would need some form of threading to avoid excessive lag.
 
 To use this player, you must:
-* Provide your own ```SoundData.ulc``` in the ```source``` folder, and modify the sound files on lines 837 onwards of ```ulcplayer.s```
+* Provide your own ```SoundData.ulc``` and modify ```ulcplayer.sw``` to match.
 * Modify the ```PATH``` variable in the ```Makefile``` to point to your build tools
 * Compile with a suitable ARM assembler+linker (wholly written in assembly; no compiler needed)
 
@@ -31,7 +31,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vertex](https://music.youtube.com/channel/UCtRTO5SOpUJvfyZD43ZTxYQ)
   * [Q-Dance](https://www.q-dance.com/) for Defqon.1 Weekend Festival 2019 set featuring [Sefa](https://djsefa.com/)
 
-## Pre-built tracks (Last update: 2020/12/13)
+## Pre-built tracks (Last update: 2021/01/09)
 
 ### Frenchcore Mix
 
