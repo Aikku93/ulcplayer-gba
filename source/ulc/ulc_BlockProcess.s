@@ -15,6 +15,8 @@
 
 @ Returns the number of bytes read
 
+.equ QSCALE_BASE, (0x8028 | (0x18+5 - ULC_COEF_PRECISION)<<7) @ "MOV r8, r8, lsr #X", lower hword
+
 ulc_BlockProcess:
 	STMFD	sp!, {r4-fp,lr}
 	LDR	r4, =ulc_State
@@ -46,8 +48,8 @@ ulc_BlockProcess:
 	SUBS	r1, r1, #0x01<<2          @ --nBlkRem?
 	BCC	.LNoBlocksRem
 	STR	r1, [r4, #0x04]
-0:	MOV	r9, #0x8700               @ "MOV r8, r8, asr #0x18+5-14" lower hword (=QScaleBase) -> r9
-	ORR	r9, r9, #0xC8
+	MOV	r9, #QSCALE_BASE & 0xFF00
+	ORR	r9, r9, #QSCALE_BASE & 0xFF
 
 .LReadBlockHeader:
 	AND	r8, r7, #0x0F         @ QScaleBase | WindowCtrl<<16 -> r9
@@ -82,13 +84,13 @@ ulc_BlockProcess:
 @  b12..15: Decimation pattern (0b0000 == 0b0001 == No decimation)
 
 .LChannels_Loop:
-	MOV	r0, #0x00                    @ 0 -> r0,r1,r2,r3
+	MOV	r0, #0x00                        @ 0 -> r0,r1,r2,r3
 	MOV	r1, #0x00
 	MOV	r2, #0x00
 	MOV	r3, #0x00
 	LDR	sl, =ulc_TransformBuffer
-	TST	r9, #0x08<<16                @ Decimating?
-	ADDNE	sl, sl, #0x04*MAX_BLOCK_SIZE @  Store to TempBuffer for deinterleaving to TransformBuffer
+	TST	r9, #0x08<<16                    @ Decimating?
+	ADDNE	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @  Store to TempBuffer for deinterleaving to TransformBuffer
 	SUB	fp, fp, fp, lsl #0x10
 	B	.LDecodeCoefs_Start
 
@@ -101,12 +103,12 @@ ulc_BlockProcess:
 	CMP	r8, #0x0E @ Stop? (8h,0h,Fh)
 	BHI	.LDecodeCoefs_Stop
 	BNE	1f
-0:	AND	r8, r6, #0x0F         @ Extended-precision quantizer (8h,0h,Eh,Xh)
+0:	AND	r8, r6, #0x0F                     @ Extended-precision quantizer (8h,0h,Eh,Xh)
 	NextNybble
 	ADD	r8, r8, #0x0E
-	CMP	r8, #0x11             @ Limit ASR value to 31, otherwise turn "ASR #x" into "LSR #20h"
-	SUBCS	r8, r9, #0x07A0
-1:	ADDCC	r8, r9, r8, lsl #0x07 @ Modify the quantizer instruction
+	CMP	r8, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
+	SUBCS	r8, r9, #QSCALE_BASE - 0x8028
+1:	ADDCC	r8, r9, r8, lsl #0x07             @ Modify the quantizer instruction
 	STRH	r8, .LDecodeCoefs_Normal_Shifter
 
 .LDecodeCoefs_DecodeLoop:
@@ -118,9 +120,9 @@ ulc_BlockProcess:
 	NextNybble
 	MOVS	ip, r8, asr #0x10 @ 4.12fxp
 	MULNE	r8, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
-	RSBMI	r8, r8, #0x00
 .LDecodeCoefs_Normal_Shifter:
-	MOV	r8, r8, asr #0x00 @ Coef=QCoef*2^(-24+14-Quant) -> r8 (NOTE: Self-modifying dequantization)
+	MOV	r8, r8, lsr #0x00 @ Coef=QCoef*2^(-24+ACCURACY-Quant) -> r8 (NOTE: Self-modifying dequantization)
+	RSBMI	r8, r8, #0x00     @ Restore sign after dequantization (round towards 0)
 	STR	r8, [sl], #0x04   @ Coefs[n++] = Coef
 	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
 	BCC	.LDecodeCoefs_DecodeLoop
@@ -133,12 +135,12 @@ ulc_BlockProcess:
 	NextNybble
 1:	CMP	r8, #0x0F           @ 8h,1h..Eh:   3.. 16 zeros
 	BNE	2f
-	AND	r8, r7, #0x0F       @ 8h,Fh,Yh,Xh: 17 .. 272 zeros
+	AND	r8, r7, #0x0F       @ 8h,Fh,Yh,Xh: 33 .. 288 zeros
 	NextNybble
 	ORR	r8, r8, r7, lsl #0x1C
 	NextNybble
 	MOV	r8, r8, ror #0x1C
-	ADD	r8, r8, #0x11-2
+	ADD	r8, r8, #0x21-2
 2:	ADD	r8, r8, #0x02
 	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= zR
 	MOVS	ip, r8, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
@@ -171,12 +173,16 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_Deinterleave:
 	STMFD	sp!, {r4-r7,r9}
-	ANDS	r8, r9, #0xE0000000          @ Lowermost bit controls which side gets overlap scaling only, so ignore it
-	SUBNE	r0, sl, #0x04*MAX_BLOCK_SIZE @  DstA = TransformBuffer(=TempBuffer-MAX_BLOCK_SIZE)
-	SUBNE	fp, fp, fp, lsl #0x10        @  Cnt  = BlockSize
+	ANDS	r8, r9, #0xE0000000              @ Lowermost bit controls which side gets overlap scaling only, so ignore it
+	SUBNE	r0, sl, #0x04*ULC_MAX_BLOCK_SIZE @  DstA = TransformBuffer(=TempBuffer-MAX_BLOCK_SIZE)
+	SUBNE	fp, fp, fp, lsl #0x10            @  Cnt  = BlockSize
 	LDRNE	pc, [pc, r8, lsr #0x1C+1-2]
 	BEQ	.LDecodeCoefs_NoDeinterleave
+.if 0
 	.word	.LDecodeCoefs_NoDeinterleave @ Unused
+.else
+	.LZeroWord: .word 0 @ Since this space goes unused, put it to good use
+.endif
 	.word	.LDecodeCoefs_Deinterleave_N2_N2
 	.word	.LDecodeCoefs_Deinterleave_N4_N4_N2
 	.word	.LDecodeCoefs_Deinterleave_N2_N4_N4
@@ -340,15 +346,15 @@ ulc_BlockProcess:
 @ sp+10h:  QScaleBase | WindowCtrl
 
 .LDecodeCoefs_SubBlockProcess:
-	LDMIA	sp, {r3,r4}                    @ &State -> r3, &OutBuf[ | Chan<<31 | IsStereo] -> r4
+	LDMIA	sp, {r3,r4}                        @ &State -> r3, &OutBuf[ | Chan<<31 | IsStereo] -> r4
 	LDRH	r9, [sp, #0x12]
-	LDRH	r7, [r3, #0x02]                @ NextOverlapSize -> r7
-	ADD	r5, sl, #0x04*MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE -> r5
+	LDRH	r7, [r3, #0x02]                    @ NextOverlapSize -> r7
+	ADD	r5, sl, #0x04*ULC_MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE -> r5
 .if ULC_STEREO_SUPPORT
-	TST	r4, #0x80000000                @ Second channel?
-	BIC	r4, r4, #0x80000001            @ [Clear Chan and IsStereo from OutBuf]
-	ADDNE	r4, r4, #0x01*MAX_BLOCK_SIZE*2 @  Skip to second channel
-	ADDNE	r5, r5, #0x04*MAX_BLOCK_SIZE/2
+	TST	r4, #0x80000000                    @ Second channel?
+	BIC	r4, r4, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
+	ADDNE	r4, r4, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel
+	ADDNE	r5, r5, #0x04*ULC_MAX_BLOCK_SIZE/2
 .endif
 	ADR	r8, .LDecodeCoefs_Deinterleave_DecimationPattern
 	LDR	r6, [r8, r9, lsr #0x0C-2]      @ DecimationPattern -> r6
@@ -370,9 +376,7 @@ ulc_BlockProcess:
 .if ULC_ALLOW_PITCH_SHIFT
 /**************************************/
 
-@ No point in optimizing this too much, since it is mostly a gimmick.
-@ Shifting down takes 4.47% CPU @ 32768Hz stereo
-@ Shifting up takes 4.25% CPU @ 32768Hz stereo
+@ No point in optimizing this too much
 
 .LDecodeCoefs_SubBlockLoop_PitchShift:
 	LDR	ip, ulc_PitchShiftKey
@@ -386,33 +390,30 @@ ulc_BlockProcess:
 	BCC	.LDecodeCoefs_SubBlockLoop_PitchShift_Up
 
 .LDecodeCoefs_SubBlockLoop_PitchShift_Down:
-	ADD	sl, sl, r0, lsl #0x02
+	ADD	r8, sl, r0, lsl #0x02
 1:	ADD	r1, r1, r1, lsl #0x10
 	MOV	lr, r1, lsr #0x10+14
 	LDR	ip, [r2], lr, lsl #0x02
 	BIC	r1, r1, lr, lsl #0x10+14
-	CMP	r2, sl
+	CMP	r2, r8
 	STR	ip, [r3], #0x04
 	BCC	1b
 2:	MOV	ip, #0x00
 	MOV	lr, #0x00
-	SUB	r2, sl, r3
+	SUB	r2, r8, r3
 	MOVS	r2, r2, lsr #0x01+2
 	STRCS	ip, [r3], #0x04
 	MOVS	r2, r2, lsr #0x01
 22:	STMNEIA	r3!, {ip,lr}
 	SUBNES	r2, r2, #0x01
 	BNE	22b
-3:	MOV	r0, r9, lsr #0x10 @ Buffer points to End, so rewind it
-	SUB	sl, sl, r0, lsl #0x02
-	B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+3:	B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
 
 ulc_PitchShiftKey: .word 0
-.size   ulc_PitchShiftKey, .-ulc_PitchShiftKey
 .global ulc_PitchShiftKey
 
 .LDecodeCoefs_SubBlockLoop_PitchShift_KeyScale: @ Floor[Table[2^(14-n/12), {n,-12,+12}] + 0.5]
-	.word 0x8000,0x78D1,0x7209,0x6BA2,0x6598
+	.word 0x7FFF,0x78D1,0x7209,0x6BA2,0x6598
 	.word 0x5FE4,0x5A82,0x556E,0x50A3,0x4C1C
 	.word 0x47D6,0x43CE,0x4000,0x3C68,0x3904
 	.word 0x35D1,0x32CC,0x2FF2,0x2D41,0x2AB7
@@ -420,17 +421,20 @@ ulc_PitchShiftKey: .word 0
 
 @ Iterate backwards to avoid reading overwritten data
 .LDecodeCoefs_SubBlockLoop_PitchShift_Up:
-	MUL	ip, r1, r0
-	ADD	r3, r3, r0, lsl #0x02
-	MOV	lr, ip, lsr #0x0E
+	SUB	ip, r0, #0x01
+	MUL	ip, r1, ip                  @ SrcPos = Rate * (BlockSize-1) [.14fxp]
+	ADD	r3, r3, r0, lsl #0x02       @ Dst = Buf + BlockSize   -> r3
+	MOV	lr, ip, lsr #0x0E           @ Src = Buf + (int)SrcPos -> r2
 	ADD	r2, r2, lr, lsl #0x02
-	MOV	r1, r1, lsl #0x10-14
-	SUB	r1, r1, r1, lsl #0x10
-1:	ADDS	r1, r1, r1, lsl #0x10
-	LDRCS	ip, [r2, #-0x04]!
-	MOVCC	ip, #0x00
-	STR	ip, [r3, #-0x04]!
-	CMP	r3, sl
+	ADD	lr, r1, ip, lsl #0x10+16-14 @ Rate [.14fxp] | SubPos<<16 [.16fxp]
+	LDMIA	r2, {r8,ip}                 @ Coef -> r8,ip
+	MOV	r0, #0x00
+	MOV	r1, #0x00
+1:	SUBS	lr, lr, lr, lsl #0x10+16-14 @ SubPos += Rate?
+	STMCCDB	r3!, {r8,ip}                @  Wrapped: Store coefficients
+	LDMCCDB	r2!, {r8,ip}                @           Load next coefficient
+	STMCSDB	r3!, {r0-r1}                @  No wrap: Store 0s
+	CMP	r3, sl                      @ Hit the start?
 	BHI	1b
 2:	@B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
 
@@ -442,15 +446,15 @@ ulc_PitchShiftKey: .word 0
 
 .LDecodeCoefs_SubBlockLoop_IMDCT:
 	MOV	r0, sl @ Undo DCT-IV
-	ADD	r1, sl, #0x04*MAX_BLOCK_SIZE @ <- In TempBuffer
+	ADD	r1, sl, #0x04*ULC_MAX_BLOCK_SIZE @ <- In TempBuffer
 	MOV	r2, r9, lsr #0x10
 	BL	Fourier_DCT4
 0:	STMFD	sp!, {r6-r7}
-	ADD	r5, r5, r9, lsr #0x10+1-2    @ Lap   = LapBuffer+SubBlockSize/2 -> r5
-	ADD	ip, sl, #0x04*MAX_BLOCK_SIZE @ OutLo (in TempBuffer) -> ip
-	ADD	lr, ip, r9, lsr #0x10-2      @ OutHi = OutLo+SubBlockSize -> lr
-	ADD	sl, sl, r9, lsr #0x10+1-2    @ Skip the next-block aliased samples (SrcBuf += SubBlockSize/2)
-	SUBS	r8, r7, r9                   @ Have any non-overlap samples? (-nNonOverlap = OverlapSize-SubBlockSize -> r8, high 16 bits)
+	ADD	r5, r5, r9, lsr #0x10+1-2        @ Lap   = LapBuffer+SubBlockSize/2 -> r5
+	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo (in TempBuffer) -> ip
+	ADD	lr, ip, r9, lsr #0x10-2          @ OutHi = OutLo+SubBlockSize -> lr
+	ADD	sl, sl, r9, lsr #0x10+1-2        @ Skip the next-block aliased samples (SrcBuf += SubBlockSize/2)
+	SUBS	r8, r7, r9                       @ Have any non-overlap samples? (-nNonOverlap = OverlapSize-SubBlockSize -> r8, high 16 bits)
 	BCS	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap @ NOTE: NextOverlapSize is always greater than OverlapScale, so this hacky condition works
 
 @ r0: [Scratch]
@@ -500,13 +504,24 @@ ulc_PitchShiftKey: .word 0
 @ lr: &OutHi
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_Overlap:
-	LDR	r8, =Fourier_DCT4_CosSin - 0x02*16
+	LDR	r8, =Fourier_CosSin - 0x02*16
 	ADD	r8, r8, r7, lsr #0x10-1
 0:	LDR	r0, [r8], #0x04       @ c | s<<16 -> r0
 	LDR	r2, [r5, #-0x04]!     @ a = *--Lap -> r2
 	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
 	MOV	r1, r0, lsr #0x10     @ s -> r1
 	BIC	r0, r0, r1, lsl #0x10 @ c -> r0
+.if ULC_64BIT_MATH
+	SMULL	r6, r7, r2, r1        @ *--OutHi = s*a + c*b -> r6,r7 [.16]
+	SMLAL	r6, r7, r3, r0
+	RSB	r3, r3, #0x00
+	SMULL	r0, r2, r2, r0        @ *OutLo++ = c*a - s*b -> r0,r2 [.16] <- GCC complains about this, but should be fine
+	SMLAL	r0, r2, r3, r1
+	MOVS	r6, r6, lsr #0x10     @ Shift down and round
+	ADC	r7, r6, r7, lsl #0x10
+	MOVS	r6, r0, lsr #0x10
+	ADC	r6, r6, r2, lsl #0x10
+.else
 	MUL	r6, r0, r2            @ c*a -> r6
 	MUL	r7, r1, r2            @ s*a -> r7
 	MUL	r2, r1, r3            @ s*b -> r2
@@ -514,6 +529,7 @@ ulc_PitchShiftKey: .word 0
 	SUB	r6, r6, r2            @ *OutLo++ = c*a - s*b
 	MOV	r6, r6, asr #0x0F
 	MOV	r7, r7, asr #0x0F
+.endif
 	STR	r6, [ip], #0x04
 	STR	r7, [lr, #-0x04]!
 	CMP	ip, lr
@@ -554,9 +570,11 @@ ulc_PitchShiftKey: .word 0
 @ sp+14h:  StreamData
 @ sp+18h:  QScaleBase | WindowCtrl
 
+.equ UNPACK_SHIFT, (ULC_COEF_PRECISION+1-8) @ Input is 1.XX due to the sign bit
+
 .LDecodeCoefs_SubBlockLoop_IMDCT_LappingCycle:
 	SUB	r6, sl, r9, lsr #0x10-2 @ SrcSmp = TempBuf (IMDCT samples were stored here)
-	ADD	r6, r6, #0x04*MAX_BLOCK_SIZE
+	ADD	r6, r6, #0x04*ULC_MAX_BLOCK_SIZE
 	MOV	r7, #0x7F               @ ClipMask -> r7
 	SUB	ip, fp, r9, lsr #0x10   @ LapExtra*2 = BlockSize-SubBlockSize -> ip
 	CMP	ip, r9, lsr #0x10-1     @ LapExtra < SubBlockSize?
@@ -565,10 +583,10 @@ ulc_PitchShiftKey: .word 0
 1:	SUBS	lr, lr, lr, lsl #0x10   @ -LapCopyRem = -LapCopy?
 	BCS	2f
 10:	LDMDB	r5!, {r0-r3}            @ *Dst++ = *--LapEnd
-	MOV	r0, r0, asr #0x07       @ NOTE: ASR #15-8, because the input is 15bit
-	MOV	r1, r1, asr #0x07
-	MOV	r2, r2, asr #0x07
-	MOV	r3, r3, asr #0x07
+	MOV	r0, r0, asr #UNPACK_SHIFT
+	MOV	r1, r1, asr #UNPACK_SHIFT
+	MOV	r2, r2, asr #UNPACK_SHIFT
+	MOV	r3, r3, asr #UNPACK_SHIFT
 	TEQ	r0, r0, lsl #0x18
 	EORMI	r0, r7, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
@@ -591,10 +609,10 @@ ulc_PitchShiftKey: .word 0
 	SUBS	lr, lr, r0, lsl #0x10
 	BCS	3f
 20:	LDMIA	r6!, {r0-r3}          @ *Dst++ = *SrcSmp++
-	MOV	r0, r0, asr #0x07
-	MOV	r1, r1, asr #0x07
-	MOV	r2, r2, asr #0x07
-	MOV	r3, r3, asr #0x07
+	MOV	r0, r0, asr #UNPACK_SHIFT
+	MOV	r1, r1, asr #UNPACK_SHIFT
+	MOV	r2, r2, asr #UNPACK_SHIFT
+	MOV	r3, r3, asr #UNPACK_SHIFT
 	TEQ	r0, r0, lsl #0x18
 	EORMI	r0, r7, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
@@ -664,7 +682,7 @@ ulc_PitchShiftKey: .word 0
 	BIC	r5, r5, #0x01
 0:	MOV	r7, #0x80000000
 	MOV	r8, fp
-	MOV	r9, #0x01*MAX_BLOCK_SIZE*2
+	MOV	r9, #0x01*ULC_MAX_BLOCK_SIZE*2
 1:	LDR	r0, [r5]
 	LDR	r1, [r5, r9]
 0:	MOV	ip, r0, lsl #0x18
@@ -698,6 +716,10 @@ ulc_PitchShiftKey: .word 0
 	STR	r6, [r4, #0x0C]
 	RSB	r0, r0, r6 @ Return bytes read for this block
 
+.LNoBufProc:
+	@MOV	r0, #0x00 @ No bytes were read
+	@B	.LExit
+
 .LExit:
 	LDMFD	sp!, {r4-fp,lr}
 	BX	lr
@@ -718,9 +740,11 @@ ulc_PitchShiftKey: .word 0
 .endif
 	STR	r2, [r2, #0x0100] @ Disable TM0
 	STR	r2, [r2, #0x0104] @ Disable TM1
-
-.LNoBufProc:
-	@MOV	r0, #0x00 @ No bytes were read
+1:	LDR	r0, =.LZeroWord
+	LDR	r1, =ulc_OutputBuffer
+	LDR	r2, =(((0x01 * ULC_MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
+	SWI	0x0C0000
+2:	MOV	r0, #0x00 @ No bytes were read
 	B	.LExit
 
 /**************************************/
@@ -745,7 +769,7 @@ ulc_PitchShiftKey: .word 0
 	ADDS	fp, fp, #0x20<<16
 	BCC	10b
 2:	SUB	r5, r5, fp         @ Clear right buffer on stereo
-	ADD	r5, r5, #0x01*MAX_BLOCK_SIZE*2
+	ADD	r5, r5, #0x01*ULC_MAX_BLOCK_SIZE*2
 	MOVS	r6, r6, lsr #0x01
 	BCS	1b
 3:	@MOV	r0, #0x00 @ No bytes were read
@@ -760,15 +784,15 @@ ulc_PitchShiftKey: .word 0
 /**************************************/
 
 ulc_TransformBuffer:
-	.space 0x04 * MAX_BLOCK_SIZE
+	.space 0x04 * ULC_MAX_BLOCK_SIZE
 .size ulc_TransformBuffer, .-ulc_TransformBuffer
 
 ulc_TransformTemp:
-	.space 0x04 * MAX_BLOCK_SIZE
+	.space 0x04 * ULC_MAX_BLOCK_SIZE
 .size ulc_TransformTemp, .-ulc_TransformTemp
 
 ulc_LappingBuffer:
-	.space 0x04 * (MAX_BLOCK_SIZE/2) * (1+ULC_STEREO_SUPPORT)
+	.space 0x04 * (ULC_MAX_BLOCK_SIZE/2) * (1+ULC_STEREO_SUPPORT)
 
 .size   ulc_LappingBuffer, .-ulc_LappingBuffer
 .global ulc_LappingBuffer @ Cleared on starting playback, so must be global

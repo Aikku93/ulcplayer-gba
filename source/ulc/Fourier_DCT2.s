@@ -1,8 +1,9 @@
 /**************************************/
+.include "source/ulc/ulc_Specs.inc"
+/**************************************/
 .section .iwram, "ax", %progbits
 .balign 4
 /**************************************/
-.equ DCT2_ACCURATE,       1
 .equ DCT2_LESS_STACK_USE, 0
 /**************************************/
 
@@ -77,9 +78,36 @@ Fourier_DCT2:
 
 @ r0: &Buf
 
+@ Rotations performed via shear matrices.
+@ 32-bit coefficients:
+@  s1_4:    (2^10-1)(2^2+1)(1+2^-2)*2^-15
+@  t1_5:    65h                    *2^-10
+@  s3_4:    (2^ 6-1)(2^4+1)(1+2^-4)*2^-11
+@  t3_5:    (2^ 5-1)(2^2+1)        *2^-9
+@  s6_4:    (2^ 6-1)(2^5-1)(1-2^-5)*2^-11
+@  t6_5:    ABh                    *2^ -8
+@  sqrt1_2: (2^ 8+1)(2^4-1)(1-2^-2)*2^-12
+@ 64-bit coefficients:
+@  s1_4:    (1+2^-2)(1+2^-2)(1-2^-10)*2^-3
+@  t1_5:    (1+2^-2)(1+2^-2)(1+2^ -7)*2^-4
+@  s3_4:    (1+2^-4)(1+2^-4)(1-2^ -6)*2^-1
+@  t3_5:    (1+2^-2)(1-2^-5)(1+2^ -9)*2^-2
+@  s6_4:    (1-2^-5)(1-2^-5)(1-2^ -6)
+@  t6_5:    (1+2^-2)(1+2^-4)(1+2^ -7)*2^-1
+@  sqrt1_2: (1-2^-2)(1-2^-4)(1+2^ -8)
+@ 64bit mode uses high-precision coefficients,
+@ so we must be careful to never scale >= 2.0.
+@ Most coefficients have been factorized into
+@ shift+add form as these worked out to be
+@ more accurate (for the same execution time)
+@ than the multiply+shift variations.
+@ The factorizations were found using a
+@ bruteforce method to minimize the error.
+
 .LDCT2_8:
 	STMFD	sp!, {r4-fp,lr}
 	LDMIA	r0, {r1-r8}
+.if ULC_64BIT_MATH
 0:	ADD	r4, r4, r5            @ s34 -> r4
 	ADD	r3, r3, r6            @ s25 -> r3
 	ADD	r2, r2, r7            @ s16 -> r2
@@ -92,101 +120,121 @@ Fourier_DCT2:
 	ADD	r2, r2, r3            @ ss16s25 -> r2
 	SUB	r3, r2, r3, lsl #0x01 @ ds16s25 -> r3
 	SUB	r4, r1, r4, lsl #0x01 @ ds07s34 -> r4
-.if DCT2_ACCURATE
-@ c3_4: 3537h [.14]
-@ s3_4: 11C7h [.13]
-@ c1_4: 7D8Ah [.15]
-@ s1_4: 63E3h [.17]
-@ c6_4: 30FBh [.15]
-@ s6_4: 3B21h [.14]
-1:	MOV	fp, #0x3500           @ c3_4[.14] -> fp
-	ORR	fp, fp, #0x37
-	MUL	r9, r5, fp            @ d34d07x =  c3_4*d34 + s3_4*d07 -> r9 [.14]
-	MUL	sl, r8, fp            @ d34d07y = -s3_4*d34 + c3_4*d07 -> sl [.14]
-	ADD	lr, r8, r8, lsl #0x03
-	ADD	lr, lr, lr, lsl #0x06
-	ADD	lr, lr, r8, lsl #0x0C
-	ADD	r9, r9, lr, lsl #0x01
-	RSB	lr, r5, r5, lsl #0x03
-	ADD	lr, lr, lr, lsl #0x06
-	ADD	lr, lr, r5, lsl #0x0C
-	SUB	sl, sl, lr, lsl #0x01
-1:	MOV	fp, #0x7D00           @ c1_4[.15] -> fp
-	MOV	lr, #0x6300           @ s1_4[.17] -> lr
-	ORR	fp, fp, #0x8A
-	ORR	lr, lr, #0xE3
-	MUL	r5, r6, fp            @ d25d16x =  c1_4*d25 + s1_4*d16 -> r5 [.15]
-	MUL	r8, r7, fp            @ d25d16y = -s1_4*d25 + c1_4*d16 -> r8 [.15]
-	MUL	fp, r6, lr
-	MUL	lr, r7, lr
-	SUB	r8, r8, fp, asr #0x02
-	ADD	r5, r5, lr, asr #0x02
-2:	MOV	lr, #0x2D00           @ sqrt1_2[.14] -> lr
-	ORR	lr, lr, #0x41
-	ADD	r1, r1, r2            @ a0 =       ss07s34 +      ss16s25 -> r1 = X0
-	SUB	r7, r1, r2, lsl #0x01 @ b0 =       ss07s34 -      ss16s25 -> r7 = X4/sqrt1_2
-	MUL	r2, r7, lr
-	MOV	sl, sl, asr #0x0E
-	MOV	r7, r2, asr #0x0E     @ [X4 -> r7]
-	ADD	sl, sl, r5, asr #0x0F @ a1 =       d34d07y +      d25d16x -> sl
-	SUB	r5, sl, r5, asr #0x0E @ c1 =       d34d07y -      d25d16x -> r5 = X3
-	MOV	r9, r9, asr #0x0E
-	ADD	r9, r9, r8, asr #0x0F @ d1 =       d34d07x +      d25d16y -> r9
-	SUB	r8, r9, r8, asr #0x0E @ b1 =       d34d07x -      d25d16y -> r8 = X5
+1:	ADD	r9, r8, r8, asr #0x02 @ t = d34 + t3_5*d07
+	SUB	r9, r9, r9, asr #0x05
+	ADD	r9, r9, r9, asr #0x09
+	ADD	r9, r5, r9, asr #0x02
+	ADD	sl, r9, r9, asr #0x04 @ d34d07y = d07 - t*s3_4 -> sl
+	ADD	sl, sl, sl, asr #0x04
+	SUB	sl, sl, sl, asr #0x06
+	SUB	sl, r8, sl, asr #0x01
+	ADD	r8, sl, sl, asr #0x02 @ d34d07x = t + d34d07y*t3_5 -> r9
+	SUB	r8, r8, r8, asr #0x05
+	ADD	r8, r8, r8, asr #0x09
+	ADD	r9, r9, r8, asr #0x02
+1:	ADD	r5, r7, r7, asr #0x02 @ t = d25 + t1_5*d16
+	ADD	r5, r5, r5, asr #0x02
+	ADD	r5, r5, r5, asr #0x07
+	ADD	r5, r6, r5, asr #0x04
+	ADD	r8, r5, r5, asr #0x02 @ d25d16y = d16 - t*s1_4 -> r8
+	ADD	r8, r8, r8, asr #0x02
+	SUB	r8, r8, r8, asr #0x0A
+	SUB	r8, r7, r8, asr #0x03
+	ADD	r7, r8, r8, asr #0x02 @ d25d16x = t + d25d16y*t1_5 -> r5
+	ADD	r7, r7, r7, asr #0x02
+	ADD	r7, r7, r7, asr #0x07
+	ADD	r5, r5, r7, asr #0x04
+2:	ADD	r1, r1, r2            @ a0 = ss07s34 + ss16s25 -> r1 = X0
+	SUB	r7, r1, r2, lsl #0x01 @ b0 = ss07s34 - ss16s25 -> r7 = X4/sqrt1_2
+	SUB	r7, r7, r7, asr #0x02 @ [X4 -> r7]
+	SUB	r7, r7, r7, asr #0x04
+	ADD	r7, r7, r7, asr #0x08
+	ADD	sl, sl, r5            @ a1 = d34d07y + d25d16x -> sl
+	SUB	r5, sl, r5, lsl #0x01 @ c1 = d34d07y - d25d16x -> r5 = X3
+	ADD	r9, r9, r8            @ d1 = d34d07x + d25d16y -> r9
+	SUB	r8, r9, r8, lsl #0x01 @ b1 = d34d07x - d25d16y -> r8 = X5
 	ADD	r2, sl, r9            @ (a1+d1)*sqrt1_2 = X1 -> r2
 	SUB	ip, sl, r9            @ (a1-d1)*sqrt1_2 = X7 -> ip
-	MUL	r9, r2, lr
-	MUL	sl, ip, lr
-	MOV	r2, r9, asr #0x0E
-	MOV	ip, sl, asr #0x0E
-	MOV	fp, #0x3000           @ c6_4[.15] -> fp
-	MOV	lr, #0x3B00           @ s6_4[.14] -> lr
-	ORR	fp, fp, #0xFB
-	ORR	lr, lr, #0x21
-	MUL	r9, r3, fp            @ c0 =  c6_4*ds16s25 + s6_4*ds07s34 -> r4 = X2
-	MUL	sl, r4, fp            @ d0 = -s6_4*ds16s25 + c6_4*ds07s34 -> r9 = X6
-	MUL	r6, r4, lr
-	MUL	lr, r3, lr
-	ADD	r4, r9, r6, lsl #0x01
-	MOV	r4, r4, asr #0x0F
-	SUB	r9, sl, lr, lsl #0x01
-	MOV	r9, r9, asr #0x0F
+	SUB	r2, r2, r2, asr #0x02
+	SUB	r2, r2, r2, asr #0x04
+	ADD	r2, r2, r2, asr #0x08
+	SUB	ip, ip, ip, asr #0x02
+	SUB	ip, ip, ip, asr #0x04
+	ADD	ip, ip, ip, asr #0x08
+        ADD	r6, r4, r4, asr #0x02 @ t = ds16s25 + t6_5*ds07s34
+        ADD	r6, r6, r6, asr #0x04
+        ADD	r6, r6, r6, asr #0x07
+        ADD	r6, r3, r6, asr #0x01
+        SUB	sl, r6, r6, asr #0x05 @ d0 = ds07s34 - t*s6_4 -> r9 = X6
+        SUB	sl, sl, sl, asr #0x05
+        SUB	sl, sl, sl, asr #0x06
+        SUB	r9, r4, sl
+	ADD	r4, r9, r9, asr #0x02 @ c0 = t + d0*t6_5      -> r4 = X2
+	ADD	r4, r4, r4, asr #0x04
+	ADD	r4, r4, r4, asr #0x07
+	ADD	r4, r6, r4, asr #0x01
 	STMIA	r0, {r1,r2,r4,r5,r7,r8,r9,ip}
 .else
-@ c3_4: 3/4
-@ s3_4: 1/2
-@ c1_4: 1.0
-@ s1_4: 3/16
-@ c6_4: 3/8
-@ s6_4: 1.0
-1:	RSB	r9, r5, r5, lsl #0x02 @ d34d07x =  c3_4*d34 + s3_4*d07 -> r9 [.2]
-	ADD	r9, r9, r8, lsl #0x01
-	RSB	sl, r8, r8, lsl #0x02 @ d34d07y = -s3_4*d34 + c3_4*d07 -> sl [.2]
-	SUB	sl, sl, r5, lsl #0x01
-1:	RSB	lr, r7, r7, lsl #0x02 @ d25d16x =  c1_4*d25 + s1_4*d16 -> r5 [.4]
-	ADD	r5, lr, r6, lsl #0x04
-	RSB	lr, r6, r6, lsl #0x02 @ d25d16y = -s1_4*d25 + c1_4*d16 -> r8 [.4]
-	RSB	r8, lr, r7, lsl #0x04
-2:	ADD	r1, r1, r2            @ a0 =       ss07s34 +      ss16s25 -> r1 = X0
-	SUB	r7, r1, r2, lsl #0x01 @ b0 =       ss07s34 -      ss16s25 -> r7 = X4/sqrt1_2
-	RSB	r7, r7, r7, lsl #0x02 @ [X4 -> r7]
-	MOV	r7, r7, asr #0x02
-	MOV	sl, sl, asr #0x02
-	ADD	sl, sl, r5, asr #0x04 @ a1 =       d34d07y +      d25d16x -> sl
-	SUB	r5, sl, r5, asr #0x03 @ c1 =       d34d07y -      d25d16x -> r5 = X3
-	MOV	r9, r9, asr #0x02
-	ADD	r9, r9, r8, asr #0x04 @ d1 =       d34d07x +      d25d16y -> r9
-	SUB	r8, r9, r8, asr #0x03 @ b1 =       d34d07x -      d25d16y -> r8 = X5
+0:	ADD	r4, r4, r5            @ s34 -> r4
+	ADD	r3, r3, r6            @ s25 -> r3
+	ADD	r2, r2, r7            @ s16 -> r2
+	ADD	r1, r1, r8            @ s07 -> r1
+	SUB	r8, r1, r8, lsl #0x01 @ d07 -> r8
+	SUB	r7, r2, r7, lsl #0x01 @ d16 -> r7
+	SUB	r6, r3, r6, lsl #0x01 @ d25 -> r6
+	SUB	r5, r4, r5, lsl #0x01 @ d34 -> r5
+0:	ADD	r1, r1, r4            @ ss07s34 -> r1
+	ADD	r2, r2, r3            @ ss16s25 -> r2
+	SUB	r3, r2, r3, lsl #0x01 @ ds16s25 -> r3
+	SUB	r4, r1, r4, lsl #0x01 @ ds07s34 -> r4
+1:	RSB	r9, r8, r8, lsl #0x05 @ t = d34 + t3_5*d07
+	ADD	r9, r9, r9, lsl #0x02
+	ADD	r9, r5, r9, asr #0x09
+	RSB	sl, r9, r9, lsl #0x06 @ d34d07y = d07 - t*s3_4 -> sl
+	ADD	sl, sl, sl, lsl #0x04
+	ADD	sl, sl, sl, asr #0x04
+	SUB	sl, r8, sl, asr #0x0B
+	RSB	r8, sl, sl, lsl #0x05 @ d34d07x = t + d34d07y*t3_5 -> r9
+	ADD	r8, r8, r8, lsl #0x02
+	ADD	r9, r9, r8, asr #0x09
+1:	MOV	fp, #0x65
+	MUL	r5, r7, fp            @ t = d25 + t1_5*d16
+	ADD	r5, r6, r5, asr #0x0A
+	RSB	r8, r5, r5, lsl #0x0A @ d25d16y = d16 - t*s1_4 -> r8
+	ADD	r8, r8, r8, lsl #0x02
+	ADD	r8, r8, r8, asr #0x02
+	SUB	r8, r7, r8, asr #0x0F
+	MUL	fp, r8, fp            @ d25d16x = t + d25d16y*t1_5 -> r5
+	ADD	r5, r5, fp, asr #0x0A
+2:	ADD	r1, r1, r2            @ a0 = ss07s34 + ss16s25 -> r1 = X0
+	SUB	r7, r1, r2, lsl #0x01 @ b0 = ss07s34 - ss16s25 -> r7 = X4/sqrt1_2
+	ADD	r7, r7, r7, lsl #0x08
+	RSB	r7, r7, r7, lsl #0x04
+	SUB	r7, r7, r7, asr #0x02
+	MOV	r7, r7, asr #0x0C     @ [X4 -> r7]
+	ADD	sl, sl, r5            @ a1 = d34d07y + d25d16x -> sl
+	SUB	r5, sl, r5, lsl #0x01 @ c1 = d34d07y - d25d16x -> r5 = X3
+	ADD	r9, r9, r8            @ d1 = d34d07x + d25d16y -> r9
+	SUB	r8, r9, r8, lsl #0x01 @ b1 = d34d07x - d25d16y -> r8 = X5
 	ADD	r2, sl, r9            @ (a1+d1)*sqrt1_2 = X1 -> r2
 	SUB	ip, sl, r9            @ (a1-d1)*sqrt1_2 = X7 -> ip
-	RSB	r2, r2, r2, lsl #0x02
-	RSB	ip, ip, ip, lsl #0x02
-	MOV	r2, r2, asr #0x02
-	MOV	ip, ip, asr #0x02
-	RSB	sl, r3, r3, lsl #0x02 @ c0 =  c6_4*ds16s25 + s6_4*ds07s34 -> r4 = X2
-	RSB	fp, r4, r4, lsl #0x02 @ d0 = -s6_4*ds16s25 + c6_4*ds07s34 -> r9 = X6
-	ADD	r4, r4, sl, asr #0x03
-	RSB	r9, r3, fp, asr #0x03
+	ADD	r2, r2, r2, lsl #0x08
+	RSB	r2, r2, r2, lsl #0x04
+	SUB	r2, r2, r2, asr #0x02
+	MOV	r2, r2, asr #0x0C
+	ADD	ip, ip, ip, lsl #0x08
+	RSB	ip, ip, ip, lsl #0x04
+	SUB	ip, ip, ip, asr #0x02
+	MOV	ip, ip, asr #0x0C
+	MOV	fp, #0xAB
+	MUL	r6, r4, fp            @ t = ds16s25 + t6_5*ds07s34
+	ADD	r6, r3, r6, asr #0x08
+	RSB	sl, r6, r6, lsl #0x06 @ d0 = ds07s34 - t*s6_4 -> r9 = X6
+	RSB	sl, sl, sl, lsl #0x05
+	SUB	sl, sl, sl, asr #0x05
+	SUB	r9, r4, sl, asr #0x0B
+	MUL	fp, r9, fp            @ c0 = t + d0*t6_5      -> r4 = X2
+	ADD	r4, r6, fp, asr #0x08
 	STMIA	r0, {r1,r2,r4,r5,r7,r8,r9,ip}
 .endif
 2:	LDMFD	sp!, {r4-fp,pc}

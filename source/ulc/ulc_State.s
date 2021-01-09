@@ -14,15 +14,15 @@ ulc_Init:
 	LDR	r2, [r0, #0x00] @ File.Magic -> r2
 	LDR	r4, [r0, #0x10] @ File.BlockSize -> r4
 	LDR	r3, =ULC_FILE_MAGIC
-0:	CMP	r2, r3                         @ Signature mismatch?
+0:	CMP	r2, r3                             @ Signature mismatch?
 	BNE	.LInit_Exit_Fail
-	LDRH	r2, [r0, #0x14]                @ File.nChan -> r2
-	LSR	r3, r4, #MAX_BLOCK_SIZE_LOG2+1 @ Incompatible block size?
+	LDRH	r2, [r0, #0x14]                    @ File.nChan -> r2
+	LSR	r3, r4, #ULC_MAX_BLOCK_SIZE_LOG2+1 @ Incompatible block size?
 	BNE	.LInit_Exit_Fail
 	LDR	r3, =0x077CB531
 .if ULC_STEREO_SUPPORT
-	SUB	r1, r2, #0x01                  @ Incompatible number of channels?
-	MOV	ip, r1                         @ [IsStereo -> ip]
+	SUB	r1, r2, #0x01                      @ Incompatible number of channels?
+	MOV	ip, r1                             @ [IsStereo -> ip]
 	CMP	r1, #0x02-1
 	BHI	.LInit_Exit_Fail
 .else
@@ -60,11 +60,11 @@ ulc_Init:
 	PUSH	{r0}
 	LDR	r0, =.LInit_ZeroWord
 	LDR	r1, =ulc_OutputBuffer
-	LDR	r2, =(((0x01 * MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
+	LDR	r2, =(((0x01 * ULC_MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
 	SWI	0x0C
 	LDR	r0, =.LInit_ZeroWord
 	LDR	r1, =ulc_LappingBuffer
-	LDR	r2, =((0x04 * (MAX_BLOCK_SIZE/2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
+	LDR	r2, =((0x04 * (ULC_MAX_BLOCK_SIZE/2) * (1+ULC_STEREO_SUPPORT)) / 0x04) | 1<<24 | 1<<26
 	SWI	0x0C
 	POP	{r0}
 
@@ -122,7 +122,7 @@ ulc_Init:
 	MOV	r4, ip             @ Stereo has DMA bit 15 set
 	LSR	r4, #0x0F
 	BEQ	1f
-0:	LSL	r4, #MAX_BLOCK_SIZE_LOG2+1
+0:	LSL	r4, #ULC_MAX_BLOCK_SIZE_LOG2+1
 	ADD	r2, #0x04          @ DMA2.Dst = &FIFOB -> r2
 	ADD	r0, r4             @ Advance source to the right-channel buffer
 	STRH	r3, [r1, #0x0A]
@@ -221,7 +221,7 @@ ulc_State:
 /**************************************/
 
 ulc_OutputBuffer:
-	.space (0x01 * MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT) @ Double-buffered output
+	.space (0x01 * ULC_MAX_BLOCK_SIZE*2) * (1+ULC_STEREO_SUPPORT) @ Double-buffered output
 
 .size   ulc_OutputBuffer, .-ulc_OutputBuffer
 .global ulc_OutputBuffer
