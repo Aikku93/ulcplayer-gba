@@ -775,41 +775,39 @@ VBlankIRQ:
 @ r2:  x
 
 .LVBlankIRQ_DrawTimeDisplayData:
-	STMFD	sp!, {r4-r9,lr}
+	STMFD	sp!, {r4-sl,lr}
 	LDR	r4, =TimeDisplayFont
 	ADR	r7, .LVBlankIRQ_DrawTimeDisplayData_DrawGlyph_1bppUnpackLUT
-0:	MOVS	r3, r0, lsr #0x14+1   @ Hour
-	ANDCS	r3, r3, #0x0F
-	LDRCS	r3, [r4, r3, lsl #0x02]
-	BLCS	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
+	MOV	sl, #0x0F
+1:	ANDS	r3, sl, r0, lsr #0x14+1 @ Hour?
+	ADDCC	r2, r2, #(4+2)/2        @  N: Center-align (x += w/2)
+	BCC	1f
+10:	LDR	r3, [r4, r3, lsl #0x02] @ Draw hour
+	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
 	ADD	r2, r2, #0x04
-0:	TST	r0, #0x01<<20         @ Drew hour?
-	LDRNE	r3, [r4, #0x04*10]    @  Colon
-	BLNE	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
-	ADD	r2, r2, #0x02
-0:	MOVS	r3, r0, lsr #0x0F+1   @ MinHi
-	ANDCS	r3, r3, #0x0F
-	LDRCS	r3, [r4, r3, lsl #0x02]
-	BLCS	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
-	ADD	r2, r2, #0x04
-0:	MOVS	r3, r0, lsr #0x0A+1   @ MinLo
-	ANDCS	r3, r3, #0x0F
-	LDRCS	r3, [r4, r3, lsl #0x02]
-	BLCS	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
-	ADD	r2, r2, #0x04
-0:	LDR	r3, [r4, #0x04*10]    @ Colon (assumes minutes are always drawn)
+	LDR	r3, [r4, #0x04*10]      @ Draw colon
 	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
 	ADD	r2, r2, #0x02
-0:	MOVS	r3, r0, lsr #0x05+1   @ SecHi
-	ANDCS	r3, r3, #0x0F
+1:	ANDS	r3, sl, r0, lsr #0x0F+1 @ MinHi?
+	SUBCC	r2, r2, #0x04/2         @  Center-align when not drawn
 	LDRCS	r3, [r4, r3, lsl #0x02]
 	BLCS	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
 	ADD	r2, r2, #0x04
-0:	MOVS	r3, r0, lsr #0x00+1   @ SecLo
-	ANDCS	r3, r3, #0x0F
-	LDRCS	r3, [r4, r3, lsl #0x02]
-	BLCS	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
-4:	LDMFD	sp!, {r4-r9,pc}
+1:	AND	r3, sl, r0, lsr #0x0A+1 @ MinLo (assumed to always be drawn)
+	LDR	r3, [r4, r3, lsl #0x02]
+	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
+	ADD	r2, r2, #0x04
+1:	LDR	r3, [r4, #0x04*10]      @ Colon (assumes minutes are always drawn)
+	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
+	ADD	r2, r2, #0x02
+1:	AND	r3, sl, r0, lsr #0x05+1 @ SecHi
+	LDR	r3, [r4, r3, lsl #0x02]
+	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
+	ADD	r2, r2, #0x04
+1:	AND	r3, sl, r0, lsr #0x00+1 @ SecLo
+	LDR	r3, [r4, r3, lsl #0x02]
+	BL	.LVBlankIRQ_DrawTimeDisplayData_DrawGlyph
+2:	LDMFD	sp!, {r4-sl,pc}
 
 @ r0: [Reserved]
 @ r1: &TileData [read-only]
@@ -828,8 +826,8 @@ VBlankIRQ:
 	AND	r5, r2, #0x07 @ sL
 	MOV	r5, r5, lsl #0x02
 	RSB	r6, r5, #0x20 @ sR
-	SUB	r5, r5, #0x05<<24
 	MOV	r8, r2, lsr #0x03
+	SUB	r2, r2, #0x05<<24
 	MOV	ip, #0x20*TIMEDISPLAY_CUR_HEIGHT_TILES
 	MLA	r8, ip, r8, r1
 1:	AND	ip, r3, #0x0F
@@ -840,7 +838,7 @@ VBlankIRQ:
 	ORRCC	r9, r9, ip, lsr r6
 	STRCC	r9, [r8, #0x20*TIMEDISPLAY_CUR_HEIGHT_TILES]
 	LDR	r9, [r8]
-	ADDS	r5, r5, #0x01<<24
+	ADDS	r2, r2, #0x01<<24
 	ORR	r9, r9, ip, lsl r5
 	STR	r9, [r8], #0x04
 	BCC	1b
