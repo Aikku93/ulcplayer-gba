@@ -116,32 +116,27 @@ Fourier_DCT4:
 	SUB	sl, sl, #0x08
 	STR	r0, [ip], #0x04
 1:	LDMIA	r8!, {r0-r3}
-	LDMDB	r9!, {r4-r7}
-	ADD	r3, r3, r4
-	ADD	r2, r2, r5
-	ADD	r1, r1, r6
-	ADD	r0, r0, r7
-	SUB	r7, r0, r7, lsl #0x01
-	SUB	r6, r1, r6, lsl #0x01
-	SUB	r5, r2, r5, lsl #0x01
-	SUB	r4, r3, r4, lsl #0x01
-	STMIA	ip!, {r0,r7}
-	STMIA	ip!, {r1,r6}
-	STMIA	ip!, {r2,r5}
-	STMIA	ip!, {r3,r4}
+	LDMDB	r9!, {r4-r5,fp,lr}
+	ADD	r6, r3, r4
+	SUB	r7, r3, r4
+	ADD	r4, r2, r5
+	SUB	r5, r2, r5
+	ADD	r2, r1, fp
+	SUB	r3, r1, fp
+	SUB	r1, r0, lr
+	ADD	r0, r0, lr
+	STMIA	ip!, {r0-r7}
 	SUBS	sl, sl, #0x08
 	BNE	1b
-2:	LDMIA	r8!, {r0-r2}
-	LDMDB	r9!, {r4-r7}
-	ADD	r2, r2, r5
-	ADD	r1, r1, r6
-	ADD	r0, r0, r7
-	SUB	r7, r0, r7, lsl #0x01
-	SUB	r6, r1, r6, lsl #0x01
-	SUB	r3, r2, r5, lsl #0x01
-	STMIA	ip!, {r0,r7}
-	STMIA	ip!, {r1,r6}
-	STMIA	ip!, {r2-r4}
+2:	LDMIA	r8!, {r0-r2,r6}
+	LDMDB	r9!, {r5,fp,lr}
+	ADD	r4, r2, r5
+	SUB	r5, r2, r5
+	ADD	r2, r1, fp
+	SUB	r3, r1, fp
+	SUB	r1, r0, lr
+	ADD	r0, r0, lr
+	STMIA	ip!, {r0-r6}
 3:	LDMFD	sp!, {r4-fp,pc}
 
 /**************************************/
@@ -186,54 +181,54 @@ Fourier_DCT4:
 	STMFD	sp!, {r4-fp,lr}
 	LDMIA	r0, {r1-r8}
 .if ULC_64BIT_MATH
-0:	SUB	r9, r8, r8, asr #0x02 @ t = x[0] + t1_6*x[7]
-	ADD	r9, r9, r9, asr #0x05
-	ADD	r9, r9, r9, asr #0x06
-	ADD	r9, r1, r9, asr #0x04
-	ADD	r1, r9, r9, asr #0x02 @ ay = t*s1_5 - x[7] -> r1
-	ADD	r1, r1, r1, asr #0x02
-	ADD	r1, r1, r1, asr #0x08
-	RSB	r1, r8, r1, asr #0x04
-	SUB	ip, r1, r1, asr #0x02 @ ax = t - ay*t1_6 -> r9
-	ADD	ip, ip, ip, asr #0x05
-	ADD	ip, ip, ip, asr #0x06
-	SUB	r9, r9, ip, asr #0x04
-0:	ADD	r8, r7, r7, asr #0x03 @ t = x[1] + t3_6*x[6]
-	ADD	r8, r8, r8, asr #0x03
-	SUB	r8, r8, r8, asr #0x04
-	ADD	r8, r2, r8, asr #0x03
-	ADD	r2, r8, r8, asr #0x03 @ by = x[6] - t*s3_5 -> r2
-	ADD	r2, r2, r2, asr #0x05
-	ADD	r2, r2, r2, asr #0x0A
-	SUB	r2, r7, r2, asr #0x02
-	ADD	r7, r2, r2, asr #0x03 @ bx = t + by*t3_6 -> r8
-	ADD	r7, r7, r7, asr #0x03
-	SUB	r7, r7, r7, asr #0x04
-	ADD	r8, r8, r7, asr #0x03
-0:	ADD	r7, r6, r6, asr #0x09 @ t = x[2] + t5_6*x[5]
-	ADD	r7, r3, r7, asr #0x02
-	SUB	r3, r7, r7, asr #0x04 @ cy = t*s5_5 - x[5] -> r3
-	ADD	r3, r3, r3, asr #0x07
-	SUB	r3, r3, r3, asr #0x09
-	RSB	r3, r6, r3, asr #0x01
-	ADD	r6, r3, r3, asr #0x09 @ cx = t - cy*t5_6 -> r7
-	SUB	r7, r7, r6, asr #0x02
-0:	SUB	r6, r5, r5, asr #0x02 @ t = x[3] + t7_6*x[4]
-	SUB	r6, r6, r6, asr #0x05
-	SUB	r6, r6, r6, asr #0x06
-	ADD	r6, r4, r6, asr #0x01
-	ADD	r4, r6, r6, asr #0x02 @ dy = x[4] - t*s7_5 -> r4
+0:	SUB	ip, r5, r5, asr #0x02 @ t = x[3] + t7_6*x[4]
+	SUB	ip, ip, ip, asr #0x05
+	SUB	ip, ip, ip, asr #0x06
+	ADD	ip, r4, ip, asr #0x01
+	ADD	r4, ip, ip, asr #0x02 @ dy = x[4] - t*s7_5 -> r4
 	ADD	r4, r4, r4, asr #0x06
 	SUB	r4, r4, r4, asr #0x0B
 	SUB	r4, r5, r4, asr #0x01
-	SUB	r5, r4, r4, asr #0x02 @ dx = t + dy*t7_6 -> r6
+	SUB	r5, r4, r4, asr #0x02 @ dx = t + dy*t7_6 -> r5
 	SUB	r5, r5, r5, asr #0x05
 	SUB	r5, r5, r5, asr #0x06
-	ADD	r6, r6, r5, asr #0x01
-1:	ADD	r9, r9, r6            @ saxdx = ax+dx -> r9
-	SUB	r6, r9, r6, lsl #0x01 @ daxdx = ax-dx -> r6
-	ADD	r8, r8, r7            @ sbxcx = bx+cx -> r8
-	SUB	r7, r8, r7, lsl #0x01 @ dbxcx = bx-cx -> r7
+	ADD	r5, ip, r5, asr #0x01
+0:	ADD	ip, r6, r6, asr #0x09 @ t = x[2] + t5_6*x[5]
+	ADD	ip, r3, ip, asr #0x02
+	SUB	r3, ip, ip, asr #0x04 @ cy = t*s5_5 - x[5] -> r3
+	ADD	r3, r3, r3, asr #0x07
+	SUB	r3, r3, r3, asr #0x09
+	RSB	r3, r6, r3, asr #0x01
+	ADD	r6, r3, r3, asr #0x09 @ cx = t - cy*t5_6 -> r6
+	SUB	r6, ip, r6, asr #0x02
+0:	ADD	ip, r7, r7, asr #0x03 @ t = x[1] + t3_6*x[6]
+	ADD	ip, ip, ip, asr #0x03
+	SUB	ip, ip, ip, asr #0x04
+	ADD	ip, r2, ip, asr #0x03
+	ADD	r2, ip, ip, asr #0x03 @ by = x[6] - t*s3_5 -> r2
+	ADD	r2, r2, r2, asr #0x05
+	ADD	r2, r2, r2, asr #0x0A
+	SUB	r2, r7, r2, asr #0x02
+	ADD	r7, r2, r2, asr #0x03 @ bx = t + by*t3_6 -> r7
+	ADD	r7, r7, r7, asr #0x03
+	SUB	r7, r7, r7, asr #0x04
+	ADD	r7, ip, r7, asr #0x03
+0:	SUB	ip, r8, r8, asr #0x02 @ t = x[0] + t1_6*x[7]
+	ADD	ip, ip, ip, asr #0x05
+	ADD	ip, ip, ip, asr #0x06
+	ADD	ip, r1, ip, asr #0x04
+	ADD	r1, ip, ip, asr #0x02 @ ay = t*s1_5 - x[7] -> r1
+	ADD	r1, r1, r1, asr #0x02
+	ADD	r1, r1, r1, asr #0x08
+	RSB	r1, r8, r1, asr #0x04
+	SUB	r8, r1, r1, asr #0x02 @ ax = t - ay*t1_6 -> r8
+	ADD	r8, r8, r8, asr #0x05
+	ADD	r8, r8, r8, asr #0x06
+	SUB	r8, ip, r8, asr #0x04
+1:	ADD	r9, r8, r5            @ saxdx = ax+dx -> r9
+	ADD	r8, r7, r6            @ sbxcx = bx+cx -> r8
+	SUB	r7, r7, r6            @ dbxcx = bx-cx -> r7
+	SUB	r6, r9, r5, lsl #0x01 @ daxdx = ax-dx -> r6
 	ADD	r4, r4, r1            @ sdyay = dy+ay -> r4
 	SUB	r1, r4, r1, lsl #0x01 @ ddyay = dy-ay -> r1
 	ADD	r3, r3, r2            @ scyby = cy+by -> r3
