@@ -41,8 +41,8 @@ Fourier_DCT4:
 	SMULL	r6, r7, r2, ip        @ Lo0 = c*a + s*b -> r6,r7 [.16]
 	SMLAL	r6, r7, r5, sl
 	RSB	ip, ip, #0x00
-	SMULL	r5, ip, ip, r5        @ Hi0 = s*a - c*b -> r5,ip [.16] <- GCC complains about this, but should be fine
-	SMLAL	r5, ip, sl, r2
+	SMULL	r5, ip, r5, ip        @ Hi0 = s*a - c*b -> r5,ip [.16] <- GCC complains about this, but should be fine
+	SMLAL	r5, ip, r2, sl
 	MOVS	r2, r6, lsr #0x10     @ Lo0 -> r2 [.0 + Round]
 	ADC	r2, r2, r7, lsl #0x10
 	MOVS	r5, r5, lsr #0x10     @ Hi0 -> r5 [.0 + Round]
