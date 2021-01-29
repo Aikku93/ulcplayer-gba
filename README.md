@@ -1,6 +1,8 @@
 # ulcplayer-gba
 Gameboy Advance player for [ulc-codec](https://github.com/Aikku93/ulc-codec).
 
+![Screenshot](/Screenshot.png?raw=true)
+
 ## Details
 
 As a proof of concept of the decoding complexity of ulc-codec, a Gameboy Advance demonstration was made. CPU usage is around 60% for 32768Hz @ 128kbps (M/S stereo) (or 70% in high-precision "64-bit" mode). Note that this is entirely a proof of concept; decode time for BlockSize=2048 (default for encoding tool) is 2-3 frames, so usage in real applications would need some form of threading to avoid excessive lag.
@@ -31,7 +33,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vertex](https://music.youtube.com/channel/UCtRTO5SOpUJvfyZD43ZTxYQ)
   * [Q-Dance](https://www.q-dance.com/) for Defqon.1 Weekend Festival 2019 set featuring [Sefa](https://djsefa.com/)
 
-## Pre-built tracks (Last update: 2021/01/21)
+## Pre-built tracks (Last update: 2021/01/29)
 
 ### Frenchcore Mix
 
