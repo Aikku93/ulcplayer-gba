@@ -11,11 +11,11 @@
 .equ GRAPH_W, 240 @ Pixels
 .equ GRAPH_H,  64 @ Pixels
 .equ GRAPH_H_LOG2, 6
-.equ GRAPH_TILEOFS, 82
+.equ GRAPH_TILEOFS, 42
 .equ GRAPH_SMPSTRIDE_RCP, 9363 @ Floor[2^27 / (VBlankRate * GRAPH_W)]
 /**************************************/
 .equ BACKDROP_ENABLE, 1
-.equ BACKDROP_PAL,    3
+.equ BACKDROP_PAL,    6
 /**************************************/
 .equ SONGDISPLAY_WIDTH,  224 @ Pixels
 .equ SONGDISPLAY_HEIGHT,  10 @ Pixels
@@ -26,41 +26,36 @@
 .equ TIMEDISPLAY_WIDTH,   24 @ Pixels
 .equ TIMEDISPLAY_HEIGHT,   5 @ Pixels
 .equ TIMEDISPLAY_CUR_X,  104 @ Pixels
-.equ TIMEDISPLAY_CUR_Y,  127 @ Pixels
+.equ TIMEDISPLAY_CUR_Y,  125 @ Pixels
 .equ TIMEDISPLAY_END_X,  208 @ Pixels
-.equ TIMEDISPLAY_END_Y,  127 @ Pixels
+.equ TIMEDISPLAY_END_Y,  125 @ Pixels
 .equ TIMEDISPLAY_NULL,   0xBDEF7 @ "--:--" (1|Bh<<1) for MM:SS
 /**************************************/
-.equ BUTTON_PREVSONG_X,      9 @ Sprite offset (Pixels)
-.equ BUTTON_PREVSONG_Y,    123
+.equ BUTTON_PREVSONG_X,     10 @ Sprite offset (Pixels)
+.equ BUTTON_PREVSONG_Y,    121
 .equ BUTTON_PREVSONG_TILE,   0
-.equ BUTTON_PREVSONG_NTILES, 8
-.equ BUTTON_PREVSONG_PAL,   14
+.equ BUTTON_PREVSONG_PAL,   15
 .equ BUTTON_PREVSONG_OBJ,    8 @ <- Hardcoded, do not change
-.equ BUTTON_PLAY_X,         31 @ Sprite offset (Pixels)
-.equ BUTTON_PLAY_Y,        117
-.equ BUTTON_PLAY_TILE,      16
-.equ BUTTON_PLAY_NTILES,    16
-.equ BUTTON_PLAY_PAL,       15
+.equ BUTTON_PLAY_X,         30 @ Sprite offset (Pixels)
+.equ BUTTON_PLAY_Y,        114
+.equ BUTTON_PLAY_TILE,       8
+.equ BUTTON_PLAY_PAL,       14
 .equ BUTTON_PLAY_OBJ,        9 @ <- Hardcoded, do not change
-.equ BUTTON_PAUSE_X,        55 @ Sprite offset (Pixels)
-.equ BUTTON_PAUSE_Y,       123
-.equ BUTTON_PAUSE_TILE,     48
-.equ BUTTON_PAUSE_NTILES,    8
-.equ BUTTON_PAUSE_PAL,      14
+.equ BUTTON_PAUSE_X,        52 @ Sprite offset (Pixels)
+.equ BUTTON_PAUSE_Y,       121
+.equ BUTTON_PAUSE_TILE,     24
+.equ BUTTON_PAUSE_PAL,      15
 .equ BUTTON_PAUSE_OBJ,      10 @ <- Hardcoded, do not change
 .equ BUTTON_NEXTSONG_X,     78 @ Sprite offset (Pixels)
-.equ BUTTON_NEXTSONG_Y,    123
-.equ BUTTON_NEXTSONG_TILE,  64
-.equ BUTTON_NEXTSONG_NTILES, 8
-.equ BUTTON_NEXTSONG_PAL,   14
+.equ BUTTON_NEXTSONG_Y,    122
+.equ BUTTON_NEXTSONG_TILE,  32
+.equ BUTTON_NEXTSONG_PAL,   15
 .equ BUTTON_NEXTSONG_OBJ,   11 @ <- Hardcoded, do not change
 .equ BUTTON_SLIDER_X0,     130 @ Sprite offset (Pixels, min)
 .equ BUTTON_SLIDER_X1,     203 @ Sprite offset (Pixels, max)
-.equ BUTTON_SLIDER_Y,      126
-.equ BUTTON_SLIDER_TILE,    80
-.equ BUTTON_SLIDER_NTILES,   1
-.equ BUTTON_SLIDER_PAL,     14
+.equ BUTTON_SLIDER_Y,      124
+.equ BUTTON_SLIDER_TILE,    40
+.equ BUTTON_SLIDER_PAL,     15
 .equ BUTTON_SLIDER_OBJ,     12 @ <- Hardcoded, do not change
 /**************************************/
 .equ DESIGN_CHARMAP,   0
@@ -68,7 +63,7 @@
 .equ DESIGN_TILEOFS,   0
 .equ GLYPHS_CHARMAP,   0
 .equ GLYPHS_TILEMAP,  30
-.equ GLYPHS_TILEOFS, (59 + 0x0000) @ Set palette here
+.equ GLYPHS_TILEOFS, (98 + 0x0000) @ Set palette here (design uses 98 tiles)
 .equ BACKDROP_CHARMAP, 0
 .equ BACKDROP_TILEMAP, 29
 /**************************************/
@@ -106,7 +101,7 @@ main:
 	BL	UnLZSS
 0:	LDR	r0, =BgDesign_Pal
 	LDR	r1, =0x05000000
-	LDR	r2, =(0x02 * (3 + BACKDROP_ENABLE)*16 / 0x04)
+	LDR	r2, =(0x02 * (6 + BACKDROP_ENABLE)*16 / 0x04)
 	SWI	0x0C
 0:	LDR	r0, =0x06010000
 	LDR	r1, =BgDesignSprites_Gfx
@@ -147,17 +142,17 @@ main:
 
 .Lmain_InitTextTilemaps:
 	LDR	r0, =0x06000000 + 0x0800*GLYPHS_TILEMAP + 0x02*(SONGDISPLAY_X/8 + 32*(SONGDISPLAY_Y/8))
-	LDR	r1, =SONGDISPLAY_TILEOFS
+	LDR	r1, =SONGDISPLAY_TILEOFS + 0x5000
 	LDR	r2, =SONGDISPLAY_WIDTH_TILES
 	LDR	r3, =SONGDISPLAY_HEIGHT_TILES
 	BL	.Lmain_SetupRawTilemap
 	LDR	r0, =0x06000000 + 0x0800*GLYPHS_TILEMAP + 0x02*(TIMEDISPLAY_CUR_X/8 + 32*(TIMEDISPLAY_CUR_Y/8))
-	LDR	r1, =TIMEDISPLAY_CUR_TILEOFS
+	LDR	r1, =TIMEDISPLAY_CUR_TILEOFS + 0x5000
 	LDR	r2, =TIMEDISPLAY_CUR_WIDTH_TILES
 	LDR	r3, =TIMEDISPLAY_CUR_HEIGHT_TILES
 	BL	.Lmain_SetupRawTilemap
 	LDR	r0, =0x06000000 + 0x0800*GLYPHS_TILEMAP + 0x02*(TIMEDISPLAY_END_X/8 + 32*(TIMEDISPLAY_END_Y/8))
-	LDR	r1, =TIMEDISPLAY_END_TILEOFS
+	LDR	r1, =TIMEDISPLAY_END_TILEOFS + 0x5000
 	LDR	r2, =TIMEDISPLAY_END_WIDTH_TILES
 	LDR	r3, =TIMEDISPLAY_END_HEIGHT_TILES
 	BL	.Lmain_SetupRawTilemap
@@ -215,25 +210,25 @@ main:
 .LMainLoop_UpdateButtons:
 	LDR	r2, =0x07000000
 1:	LSR	r3, r1, #0x09+1 @ Previous song? (SL)
-	LDR	r3, =BUTTON_PREVSONG_TILE | BUTTON_PREVSONG_PAL<<12
+	LDR	r3, .Lmain_SpriteDisableWord
 	BCC	0f
-	ADD	r3, #BUTTON_PREVSONG_NTILES
-0:	STR	r3, [r2, #0x08*BUTTON_PREVSONG_OBJ + 0x04]
+	LDR	r3, .Lmain_Button_PrevSong_Attr0
+0:	STR	r3, [r2, #0x08*BUTTON_PREVSONG_OBJ]
 1:	LSR	r3, r1, #0x08+1 @ Next song? (SR)
-	LDR	r3, =BUTTON_NEXTSONG_TILE | BUTTON_NEXTSONG_PAL<<12
+	LDR	r3, .Lmain_SpriteDisableWord
 	BCC	0f
-	ADD	r3, #BUTTON_NEXTSONG_NTILES
-0:	STR	r3, [r2, #0x08*BUTTON_NEXTSONG_OBJ + 0x04]
+	LDR	r3, .Lmain_Button_NextSong_Attr0
+0:	STR	r3, [r2, #0x08*BUTTON_NEXTSONG_OBJ]
 1:	LSR	r3, r1, #0x01+1 @ Pause? (B)
-	LDR	r3, =BUTTON_PAUSE_TILE | BUTTON_PAUSE_PAL<<12
+	LDR	r3, .Lmain_SpriteDisableWord
 	BCC	0f
-	ADD	r3, #BUTTON_PAUSE_NTILES
-0:	STR	r3, [r2, #0x08*BUTTON_PAUSE_OBJ + 0x04]
+	LDR	r3, .Lmain_Button_PauseSong_Attr0
+0:	STR	r3, [r2, #0x08*BUTTON_PAUSE_OBJ]
 1:	LSR	r3, r1, #0x00+1 @ Play? (A)
-	LDR	r3, =BUTTON_PLAY_TILE | BUTTON_PLAY_PAL<<12
+	LDR	r3, .Lmain_SpriteDisableWord
 	BCC	0f
-	ADD	r3, #BUTTON_PLAY_NTILES
-0:	STR	r3, [r2, #0x08*BUTTON_PLAY_OBJ + 0x04]
+	LDR	r3, .Lmain_Button_PlaySong_Attr0
+0:	STR	r3, [r2, #0x08*BUTTON_PLAY_OBJ]
 
 .LMainLoop_ProcessButtons:
 .if ULC_ALLOW_PITCH_SHIFT
@@ -478,22 +473,32 @@ main:
 	.hword (GRAPH_X+192) | 1<<9 | 3<<14 @ RotMat[1], 32x64
 	.hword GRAPH_TILEOFS + 6*(32*64 / (8*8))
 	.hword 0
-0:	.hword BUTTON_PREVSONG_Y    | 1<<14
+
+.Lmain_Button_PrevSong_Attr0:
+	.hword BUTTON_PREVSONG_Y    | 1<<14
 	.hword BUTTON_PREVSONG_X    | 2<<14                   @ 32x16
 	.hword BUTTON_PREVSONG_TILE | BUTTON_PREVSONG_PAL<<12
 	.hword 0
+
+.Lmain_Button_PlaySong_Attr0:
 	.hword BUTTON_PLAY_Y
-	.hword BUTTON_PLAY_X        | 2<<14                   @ 32x32 (selected)
+	.hword BUTTON_PLAY_X        | 2<<14                   @ 32x32
 	.hword BUTTON_PLAY_TILE     | BUTTON_PLAY_PAL<<12
 	.hword 0
+
+.Lmain_Button_PauseSong_Attr0:
 	.hword BUTTON_PAUSE_Y       | 1<<14
 	.hword BUTTON_PAUSE_X       | 2<<14                   @ 32x16
 	.hword BUTTON_PAUSE_TILE    | BUTTON_PAUSE_PAL<<12
 	.hword 0
+
+.Lmain_Button_NextSong_Attr0:
 	.hword BUTTON_NEXTSONG_Y    | 1<<14
 	.hword BUTTON_NEXTSONG_X    | 2<<14                   @ 32x16
 	.hword BUTTON_NEXTSONG_TILE | BUTTON_NEXTSONG_PAL<<12
 	.hword 0
+
+.Lmain_Button_Slider_Attr0:
 	.hword BUTTON_SLIDER_Y
 	.hword BUTTON_SLIDER_X0                               @ 8x8
 	.hword BUTTON_SLIDER_TILE   | BUTTON_SLIDER_PAL<<12
@@ -907,8 +912,8 @@ VBlankIRQ:
 .LVBlankIRQ_TrackNameLastUpdate: .word 0
 
 .LVBlankIRQ_DrawTimeDisplayData_DrawGlyph_1bppUnpackLUT:
-	.word 0x00000000,0x00000001,0x00000010,0x00000011,0x00000100,0x00000101,0x00000110,0x00000111
-	.word 0x00001000,0x00001001,0x00001010,0x00001011,0x00001100,0x00001101,0x00001110,0x00001111
+	.word 0x00000000,0x0000000F,0x000000F0,0x000000FF,0x00000F00,0x00000F0F,0x00000FF0,0x00000FFF
+	.word 0x0000F000,0x0000F00F,0x0000F0F0,0x0000F0FF,0x0000FF00,0x0000FF0F,0x0000FFF0,0x0000FFFF
 
 /**************************************/
 .size VBlankIRQ, .-VBlankIRQ
