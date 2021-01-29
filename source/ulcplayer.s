@@ -53,7 +53,7 @@
 .equ BUTTON_NEXTSONG_OBJ,   11 @ <- Hardcoded, do not change
 .equ BUTTON_SLIDER_X0,     130 @ Sprite offset (Pixels, min)
 .equ BUTTON_SLIDER_X1,     203 @ Sprite offset (Pixels, max)
-.equ BUTTON_SLIDER_Y,      124
+.equ BUTTON_SLIDER_Y,      125
 .equ BUTTON_SLIDER_TILE,    40
 .equ BUTTON_SLIDER_PAL,     15
 .equ BUTTON_SLIDER_OBJ,     12 @ <- Hardcoded, do not change
