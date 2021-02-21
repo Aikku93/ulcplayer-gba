@@ -252,11 +252,10 @@ main:
 	BEQ	2f
 10:	MOV	r5, r0          @ Set CurrentSoundFile. Playing music (ie. not stopped)?
 	BEQ	12f
-11:	LDR	r2, [r5, #0x10] @ File.BlockSize -> r2
-	LDR	r0, [r5, #0x08] @ File.nSamp -> r0
+11:	LDRH	r2, [r5, #0x04] @ File.BlockSize -> r2
+	LDR	r0, [r5, #0x08] @ File.nBlocks -> r0
 	LDR	r1, [r5, #0x0C] @ File.RateHz -> r1
-	ADD	r0, r2          @ Pad nSamp with 2*BlockSize to account for coding delays
-	ADD	r0, r2
+	MUL	r0, r2          @ nSamples = nBlocks*BlockSize -> r0
 	BL	__aeabi_uidiv   @ nSeconds -> r0
 	LDR	r2, =0x88888889 @ 1/60 [.37fxp] -> r2
 	BL	.Lmain_GetMinsSecsTHUMB
@@ -532,18 +531,16 @@ VBlankIRQ:
 	MOVEQ	sl, #0x00
 	BEQ	2f
 1:	LDRH	r5, [r0, #0x0104-0xF0] @ Get SmpPos from timer -> r5
-	ADD	fp, fp, #0x08
-	LDMIA	fp, {r1,r8,sl}         @ nSmp = File.nSamp -> r1, RateHz -> r8, BlockSize -> sl
+	LDMIB	fp, {r0,r1,r8}         @ File.BlockSize | x<<16 -> r0, File.nBlocks -> r1, File.RateHz -> r8
+	MOV	sl, r0, lsl #0x10      @ BlockSize -> sl
+	MOV	sl, sl, lsr #0x10
+	MUL	r1, r1, sl             @ nSmp = nBlocks*BlockSize -> r1
 	LDR	r2, [r4, #0x04]        @ WrBufIdx | Pause<<1 | (nBlkRem-1)<<2 -> r2
 	RSB	r5, r5, #0x010000      @ SmpPos = BlockSize - ((1<<16)-TimerVal)
 	RSB	r5, r5, sl
 	MLA	r5, sl, ip, r5         @ SmpPos += RdBufIdx*BlockSize (adjust for double buffer)
 	MVN	r2, r2, lsr #0x02      @ -SmpRem = -nBlkRem*BlockSize + SmpPos -> r3 (nBlkRem is pre-decremented, so add 1)
 	MLA	r3, r2, sl, r5         @ NOTE: nBlkRem is not particularly reliable, but should be fine for display purposes
-	ADD	r1, r1, sl, lsl #0x01  @ (nSmp += 2*BlockSize, for coding delays)
-	SUB	r6, sl, #0x01          @ Add BlockSize rounding
-	ADD	r1, r1, r6
-	BIC	r1, r1, r6
 	ADD	r6, r1, r3             @ SmpOfs = nSmp - SmpRem -> r6
 .if 0 @ This overflows on long tracks
 	MOV	r2, #BUTTON_SLIDER_X1+1 - BUTTON_SLIDER_X0
@@ -683,7 +680,7 @@ VBlankIRQ:
 	LDR	r4, [r4, #0x08]
 	MOVS	r5, r4
 .if ULC_STEREO_SUPPORT
-	LDRNEB	r5, [r4, #0x14]         @ nChan -> r5
+	LDRNEH	r5, [r4, #0x10]         @ nChan -> r5
 .endif
 	LDRNE	r4, [r4, #0x0C]         @ RateHz -> r4
 .if ULC_STEREO_SUPPORT
