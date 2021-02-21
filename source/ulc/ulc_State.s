@@ -12,11 +12,11 @@
 ulc_Init:
 	PUSH	{r4,lr}
 	LDR	r2, [r0, #0x00] @ File.Magic -> r2
-	LDR	r4, [r0, #0x10] @ File.BlockSize -> r4
+	LDRH	r4, [r0, #0x04] @ File.BlockSize -> r4
 	LDR	r3, =ULC_FILE_MAGIC
 0:	CMP	r2, r3                             @ Signature mismatch?
 	BNE	.LInit_Exit_Fail
-	LDRH	r2, [r0, #0x14]                    @ File.nChan -> r2
+	LDRH	r2, [r0, #0x10]                    @ File.nChan -> r2
 	LSR	r3, r4, #ULC_MAX_BLOCK_SIZE_LOG2+1 @ Incompatible block size?
 	BNE	.LInit_Exit_Fail
 	LDR	r3, =0x077CB531
@@ -33,18 +33,15 @@ ulc_Init:
 	LDR	r2, =_IRQProc_Log2Tab
 	LSR	r3, #0x20-5
 	LDRB	r2, [r2, r3]
-	LDR	r3, [r0, #0x08]                @ File.nSamp -> r3
+	LDR	r3, [r0, #0x08]                @ State.nBlkRem = File.nBlocks-1 -> r3
 	LDR	r1, =ulc_State
-	ADD	r3, r4                         @ State.nBlkRem = (File.nSamp+BlockSize-1)/BlockSize + 1 + 1
-	SUB	r3, #0x01
-	LSR	r3, r2
-	ADD	r3, #0x02-1                    @ NOTE: -1 because we count by using the -CS condition
+	SUB	r3, #0x01                      @ NOTE: -1 because we count by using the -CS condition
 	LSL	r3, #0x02                      @ WrBufIdx=0 | Pause=0
 	MOV	r2, #0x00
 	STMIA	r1!, {r2,r3}                   @ RdBufIdx = 0,nBufProc = 0,OverlapSize = 0, store WrBufIdx|nBlkRem<<1
-	MOV	r2, #0x18                      @ State.NextData    = File.SkipHeader()
-	ADD	r2, r0
-	STMIA	r1!, {r0,r2}                   @ State.SoundFile   = File, State.NextData = File.SkipHeader()
+	LDR	r2, [r0, #0x14]                @ File.StreamOffs -> r2
+	ADD	r2, r0                         @ State.SoundFile = File, State.NextData = File + StreamOffs
+	STMIA	r1!, {r0,r2}
 .if ULC_STEREO_SUPPORT
 	ADD	r4, r4                         @ IsStereo | BlockSize<<1 -> r4
 	ADD	r4, ip
