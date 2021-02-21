@@ -25,9 +25,9 @@ ulc_BlockProcess:
 	LDMIB	r4, {r1-r2,r6}            @ WrBufIdx | Pause<<1 | nBlkRem<<2 -> r1, &File -> r2, &NextData -> r6
 	CMP	r2, #0x00                 @ !File? Early exit to avoid reading from NULL
 	BEQ	.LNoBufProc
-	LDR	fp, [r2, #0x10]           @ BlockSize -> fp
+	LDRH	fp, [r2, #0x04]           @ BlockSize -> fp
 .if ULC_STEREO_SUPPORT
-	LDRB	r2, [r2, #0x14]           @ nChan -> r2
+	LDRH	r2, [r2, #0x10]           @ nChan -> r2
 .endif
 0:	AND	ip, r6, #0x03             @ Prepare reader (&NextData | NybbleCounter<<29 -> r6, StreamData -> r7)
 	LDR	r7, [r6, -ip]!
@@ -76,7 +76,7 @@ ulc_BlockProcess:
 @ sl: &CoefDst
 @ fp:  BlockSize | -CoefRem<<16
 @ ip: [Scratch]
-@ lr: [Scratch]
+@ lr: Log2[Quant]
 @ NOTE: WindowCtrl is stored as:
 @  b0..2:   OverlapScale
 @  b3:      Decimation toggle
@@ -92,23 +92,25 @@ ulc_BlockProcess:
 	TST	r9, #0x08<<16                    @ Decimating?
 	ADDNE	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @  Store to TempBuffer for deinterleaving to TransformBuffer
 	SUB	fp, fp, fp, lsl #0x10
+	MVN	lr, #0x00                        @ Clear initial quantizer (detection for tail noise-fill)
 	B	.LDecodeCoefs_Start
 
 .LDecodeCoefs_ChangeQuant:
 	NextNybble
 
 .LDecodeCoefs_Start:
-	AND	r8, r7, #0x0F
+	AND	ip, r7, #0x0F
 	NextNybble
-	CMP	r8, #0x0E @ Stop? (8h,0h,Fh)
+	CMP	ip, #0x0E                         @ Stop? (8h,0h,Fh)
 	BHI	.LDecodeCoefs_Stop
+	MOV	lr, ip                            @ Definitely a quantizer change - Prepare for update
 	BNE	1f
-0:	AND	r8, r6, #0x0F                     @ Extended-precision quantizer (8h,0h,Eh,Xh)
+0:	AND	lr, r6, #0x0F                     @ Extended-precision quantizer (8h,0h,Eh,Xh)
 	NextNybble
-	ADD	r8, r8, #0x0E
-	CMP	r8, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
+	ADD	lr, lr, #0x0E
+	CMP	lr, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
 	SUBCS	r8, r9, #QSCALE_BASE - 0x8028
-1:	ADDCC	r8, r9, r8, lsl #0x07             @ Modify the quantizer instruction
+1:	ADDCC	r8, r9, lr, lsl #0x07             @ Modify the quantizer instruction
 	STRH	r8, .LDecodeCoefs_Normal_Shifter
 
 .LDecodeCoefs_DecodeLoop:
@@ -133,28 +135,85 @@ ulc_BlockProcess:
 	ANDS	r8, r7, #0x0F @ Quantizer change? (8h,0h,Xh)
 	BEQ	.LDecodeCoefs_ChangeQuant
 	NextNybble
-1:	CMP	r8, #0x0F           @ 8h,1h..Eh:   3.. 16 zeros
-	BNE	2f
-	AND	r8, r7, #0x0F       @ 8h,Fh,Yh,Xh: 33 .. 288 zeros
+1:	SUBS	ip, r8, #0x0E       @ 8h,1h..Dh:   3.. 15 zeros
+	BCC	2f
+	AND	r8, r7, #0x0F       @ 8h,Eh,Zh,Yh,Xh: 31 .. 286 noise samples, 8h,Fh,Yh,Xh: 31 .. 286 zeros
 	NextNybble
 	ORR	r8, r8, r7, lsl #0x1C
 	NextNybble
 	MOV	r8, r8, ror #0x1C
-	ADD	r8, r8, #0x21-2
+	ADD	r8, r8, #0x1F-2
 2:	ADD	r8, r8, #0x02
 	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= zR
-	MOVS	ip, r8, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
+	CMP	ip, #0x00             @ Noise mode?
+	BEQ	.LDecodeCoefs_NoiseFill
+20:	MOVS	ip, r8, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
 	STRMI	r0, [sl], #0x04
 	STMCSIA	sl!, {r0-r1}
 	MOVS	r8, r8, lsr #0x02
-20:	STMNEIA	sl!, {r0-r3}
+21:	STMNEIA	sl!, {r0-r3}
 	SUBNES	r8, r8, #0x01
-	BNE	20b
+	BNE	21b
 3:	CMP	fp, #0x010000
 	BCS	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
+.LDecodeCoefs_NoiseFill:
+	ANDS	ip, r7, #0x0F         @ v -> ip
+	ADD	ip, ip, #0x01         @ Scale = (v+1)^2 * Quant/8 -> ip (not scaled yet)
+	MULNE	ip, ip, ip
+	NextNybble
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -.3 for noise-fill quantizer, -5 for quantizer bias
+	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
+	BEQ	20b
+0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
+	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
+1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
+	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
+	EOR	r8, r8, r8, lsr #0x11
+	EOR	r8, r8, r8, lsl #0x05
+	ADDS	lr, lr, #0x01<<8
+	STR	r1, [sl], #0x04
+	BCC	1b
+2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
+	MOV	r1, #0x00
+	CMP	fp, #0x010000
+	BCS	.LDecodeCoefs_DecodeLoop
+	B	.LDecodeCoefs_NoMoreCoefs
+
 .LDecodeCoefs_Stop:
+	CMN	lr, #0x01     @ No coefficients coded?
+	BEQ	.LDecodeCoefs_Stop_ZeroFill
+0:	ANDS	ip, r7, #0x0F @ NoiseQ -> ip?
+	MULNE	ip, ip, ip
+	BEQ	.LDecodeCoefs_Stop_NextNybble_ZeroFill
+	NextNybble
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ Same as normal noise fill. Scale -> ip
+	MOVS	ip, ip, lsr lr
+	BEQ	.LDecodeCoefs_Stop_NextNybble_ZeroFill
+	ANDS	lr, r7, #0x0F         @ Decay -> lr
+	ADD	lr, lr, #0x01
+	MULNE	lr, lr, lr
+	NextNybble
+	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
+	ADD	lr, lr, lr, lsl #0x08 @ 1 - (Decay^2 / 17^2) [.32]
+	ADD	lr, lr, lr, lsl #0x08
+	RSB	lr, lr, lr, lsl #0x04
+	SUB	lr, lr, lr, lsl #0x04 @ <- Should be RSB followed by RSB #1<<32, but this achieves the same thing
+1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
+	UMULL	r0, ip, lr, ip        @ Scale *= Decay
+	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
+	EOR	r8, r8, r8, lsr #0x11
+	EOR	r8, r8, r8, lsl #0x05
+	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
+	STR	r1, [sl], #0x04
+	BCC	1b
+2:	B	.LDecodeCoefs_NoMoreCoefs
+
+.LDecodeCoefs_Stop_NextNybble_ZeroFill:
+	NextNybble
+
+.LDecodeCoefs_Stop_ZeroFill:
 	RSB	r8, fp, #0x010000
 	MOVS	r8, r8, lsr #0x01+16
 	STRCS	r0, [sl], #0x04
