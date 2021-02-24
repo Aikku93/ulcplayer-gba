@@ -196,10 +196,7 @@ ulc_BlockProcess:
 	MULNE	lr, lr, lr
 	NextNybble
 	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
-	ADD	lr, lr, lr, lsl #0x08 @ 1 - (Decay^2 / 17^2) [.32]
-	ADD	lr, lr, lr, lsl #0x08
-	RSB	lr, lr, lr, lsl #0x04
-	SUB	lr, lr, lr, lsl #0x04 @ <- Should be RSB followed by RSB #1<<32, but this achieves the same thing
+	RSB	lr, r0, lr, lsl #0x20-(5*2) @ 1 - (Decay^2 / 32^2) [.32]
 1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
 	UMULL	r0, ip, lr, ip        @ Scale *= Decay
 	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
