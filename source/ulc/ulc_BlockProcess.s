@@ -477,18 +477,18 @@ ulc_PitchShiftKey: .word 0
 
 @ Iterate backwards to avoid reading overwritten data
 .LDecodeCoefs_SubBlockLoop_PitchShift_Up:
-	SUB	ip, r0, #0x01
-	MUL	ip, r1, ip                  @ SrcPos = Rate * (BlockSize-1) [.14fxp]
+	MUL	ip, r1, r0                  @ SrcPos = Rate * BlockSize+eps [.14fxp]
 	ADD	r3, r3, r0, lsl #0x02       @ Dst = Buf + BlockSize   -> r3
-	MOV	lr, ip, lsr #0x0E           @ Src = Buf + (int)SrcPos -> r2
-	ADD	r2, r2, lr, lsl #0x02
+	ADD	ip, ip, #0x01
+	MOV	lr, ip, lsr #0x0E+1         @ Src = Buf + (int)(SrcPos/2)*2 -> r2 (always align to 2 coefficients)
+	ADD	r2, r2, lr, lsl #0x02+1
 	ADD	lr, r1, ip, lsl #0x10+16-14 @ Rate [.14fxp] | SubPos<<16 [.16fxp]
-	LDMIA	r2, {r8,ip}                 @ Coef -> r8,ip
+	LDMDB	r2!, {r8,ip}                @ Coef -> r8,ip
 	MOV	r0, #0x00
 	MOV	r1, #0x00
 1:	SUBS	lr, lr, lr, lsl #0x10+16-14 @ SubPos += Rate?
 	STMCCDB	r3!, {r8,ip}                @  Wrapped: Store coefficients
-	LDMCCDB	r2!, {r8,ip}                @           Load next coefficient
+	LDMCCDB	r2!, {r8,ip}                @           Load next coefficients
 	STMCSDB	r3!, {r0-r1}                @  No wrap: Store 0s
 	CMP	r3, sl                      @ Hit the start?
 	BHI	1b
