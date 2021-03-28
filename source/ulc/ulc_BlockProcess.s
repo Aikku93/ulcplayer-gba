@@ -185,18 +185,18 @@ ulc_BlockProcess:
 	CMN	lr, #0x01     @ No coefficients coded?
 	BEQ	.LDecodeCoefs_Stop_ZeroFill
 0:	ANDS	ip, r7, #0x0F @ NoiseQ -> ip?
-	MULNE	ip, ip, ip
 	BEQ	.LDecodeCoefs_Stop_NextNybble_ZeroFill
+	MUL	r8, ip, ip
 	NextNybble
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ Same as normal noise fill. Scale -> ip
-	MOVS	ip, ip, lsr lr
+	MOV	ip, r8, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ Same as normal noise fill. Scale -> ip
+	RSBS	ip, r0, ip, lsr lr    @ [C=1]
 	BEQ	.LDecodeCoefs_Stop_NextNybble_ZeroFill
 	ANDS	lr, r7, #0x0F         @ Decay -> lr
-	ADD	lr, lr, #0x01
-	MULNE	lr, lr, lr
-	NextNybble
+	MULNE	r0, lr, lr            @  (x+1)^2 = x^2 + 2x + 1
 	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
-	RSB	lr, r0, lr, lsl #0x20-(5*2) @ 1 - (Decay^2 / 32^2) [.32]
+	ADC	lr, r0, lr, lsl #0x01
+	NextNybble
+	RSB	lr, r1, lr, lsl #0x20-(5*2) @ 1 - (Decay^2 / 32^2) [.32]
 1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
 	UMULL	r0, ip, lr, ip        @ Scale *= Decay
 	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
