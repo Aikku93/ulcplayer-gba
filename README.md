@@ -20,11 +20,11 @@ The player supports both mono and stereo files and any block size up to 2048.
 ## Acknowledgements
 * Credit goes to the following artists for their tracks used as demos:
   * [Adaro](https://music.youtube.com/channel/UCs36BCtgc4NIlaH1CwqZNrw)
-  * [D-Fence](https://music.youtube.com/channel/UCYWaI0YFInBINNgeKUeUgLg)
   * [Damian Ray](https://music.youtube.com/channel/UCmv071TnqPRRd5RrkrPh8Jw)
   * [Divide](https://music.youtube.com/channel/UC9hoh7Hnqj2dfoZS-nTriHA)
   * [Dr. Peacock](https://music.youtube.com/channel/UC3EjYttTVgJllvuttr6PzNw)
   * [Fury](https://music.youtube.com/channel/UC_S8_99gWKSex7VnolJSRoQ)
+  * [Juju Rush](https://www.facebook.com/jujurush99/)
   * [Linkin Park](https://music.youtube.com/channel/UCxgN32UVVztKAQd2HkXzBtw)
   * [Mr. Ivex](https://music.youtube.com/channel/UCsrWJSnK1ZryH-92x00a4uA)
   * [Rayvolt](https://music.youtube.com/channel/UCUCZojA3_kduHSK_-bmYSAA)
@@ -35,7 +35,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built tracks (Last update: 2021/03/29)
+## Pre-built tracks (Last update: 2021/04/18)
 
 ### Frenchcore Mix
 
@@ -52,7 +52,7 @@ Featuring:
  * Vertex - Collective Paranoia
  * Re-Style & Vertex - Shadow World
  * Vertex - Breaking The Habit
- * Linkin Park - In The End (D-Fence Remix)
+ * Juju Rush - Catching Fire
  * Sefa & Mr. Ivex - LSD Problem
  * Sefa - Schopenhauer
  * Dr. Peacock - Vive La Volta (Sefa Remix)
