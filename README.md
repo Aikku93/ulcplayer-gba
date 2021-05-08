@@ -19,13 +19,10 @@ The player supports both mono and stereo files and any block size up to 2048.
 
 ## Acknowledgements
 * Credit goes to the following artists for their tracks used as demos:
-  * [Adaro](https://music.youtube.com/channel/UCs36BCtgc4NIlaH1CwqZNrw)
   * [Damian Ray](https://music.youtube.com/channel/UCmv071TnqPRRd5RrkrPh8Jw)
-  * [Divide](https://music.youtube.com/channel/UC9hoh7Hnqj2dfoZS-nTriHA)
   * [Dr. Peacock](https://music.youtube.com/channel/UC3EjYttTVgJllvuttr6PzNw)
-  * [Fury](https://music.youtube.com/channel/UC_S8_99gWKSex7VnolJSRoQ)
   * [Juju Rush](https://www.facebook.com/jujurush99/)
-  * [Linkin Park](https://music.youtube.com/channel/UCxgN32UVVztKAQd2HkXzBtw)
+  * [Korsakoff](https://music.youtube.com/channel/UCIw93jBDgd-hHhSJAtvQNRA)
   * [Mr. Ivex](https://music.youtube.com/channel/UCsrWJSnK1ZryH-92x00a4uA)
   * [Rayvolt](https://music.youtube.com/channel/UCUCZojA3_kduHSK_-bmYSAA)
   * [Re-Style](https://music.youtube.com/channel/UCL9cYAVYKKXubDZ-fXS4v4w)
@@ -35,32 +32,30 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built tracks (Last update: 2021/04/18)
+## Pre-built tracks (Last update: 2021/05/08)
 
 ### Frenchcore Mix
 
 Files:
- * [~64kbps VBR @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~64kbps VBR (Q=50..55) @ 32.768kHz (M/S stereo, 31.8MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Rayvolt - And We Run
+ * Vertex - Run It Up
  * Vertex - Get Down
- * Divide - Never Let Go
- * Fury - All I Want
- * Adaro - I'm Alive (Re-Style & Vertex Remix)
  * Damian Ray - In My Brain (Rayvolt Remix)
  * Vertex - Collective Paranoia
  * Re-Style & Vertex - Shadow World
- * Vertex - Breaking The Habit
- * Juju Rush - Catching Fire
  * Sefa & Mr. Ivex - LSD Problem
  * Sefa - Schopenhauer
  * Dr. Peacock - Vive La Volta (Sefa Remix)
+ * Juju Rush - Catching Fire
  * Vertex - Let It Roll
- * Re-Style - Towards the Sun (Vertex & Rayvolt Remix)
- * Rayvolt - Wellerman
- * Toto - Africa (Rayvolt Remix)
- * Vicetone & Tony Igy - Astronomia (Rayvolt Remix)
+ * Re-Style - Towards the Sun (Vertex & Rayvolt Remix)"
+ * Toto - Africa (Rayvolt Remix)"
+ * Rayvolt - Wellerman"
+ * Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
+ * Re-Style & Korsakoff - Leap of Faith"
 
 ### (Q-Dance) Defqon.1 Weekend Festival 2019 - Sefa
 
@@ -70,4 +65,4 @@ Files:
 ### Rayvolt - Start The Revolt: Live Yearmix 2020
 
 Files:
- * [~63kbps VBR @ 32.768kHz (M/S stereo, 31.8MiB)](https://www.mediafire.com/file/khi0dtx0ifgo9ql/file)
+ * [~63kbps VBR @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/khi0dtx0ifgo9ql/file)
