@@ -38,7 +38,7 @@ ulc_Init:
 	SUB	r3, #0x01                      @ NOTE: -1 because we count by using the -CS condition
 	LSL	r3, #0x02                      @ WrBufIdx=0 | Pause=0
 	MOV	r2, #0x00
-	STMIA	r1!, {r2,r3}                   @ RdBufIdx = 0,nBufProc = 0,OverlapSize = 0, store WrBufIdx|nBlkRem<<1
+	STMIA	r1!, {r2,r3}                   @ RdBufIdx = 0,nBufProc = 0,LastSubBlockSize = 0, store WrBufIdx|nBlkRem<<1
 	LDR	r2, [r0, #0x14]                @ File.StreamOffs -> r2
 	ADD	r2, r0                         @ State.SoundFile = File, State.NextData = File + StreamOffs
 	STMIA	r1!, {r0,r2}
@@ -208,7 +208,7 @@ ulc_TM1Proc_2ch:
 ulc_State:
 	.byte  0 @ [00h]  RdBufIdx
 	.byte  0 @ [01h]  nBufProc
-	.hword 0 @ [02h]  OverlapSize
+	.hword 0 @ [02h]  LastSubBlockSize
 	.word  0 @ [04h]  WrBufIdx | Pause<<1 | nBlkRem<<2
 	.word  0 @ [08h] &SoundFile
 	.word  0 @ [0Ch] &NextData

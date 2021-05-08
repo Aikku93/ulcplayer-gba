@@ -1,4 +1,4 @@
-.equ ULC_FILE_MAGIC, ('U' | 'L'<<8 | 'C'<<16 | '1'<<24)
+.equ ULC_FILE_MAGIC, ('U' | 'L'<<8 | 'C'<<16 | '2'<<24)
 
 @ This controls the maximum block size allowed for
 @ decoding. A larger size uses more memory, but allows

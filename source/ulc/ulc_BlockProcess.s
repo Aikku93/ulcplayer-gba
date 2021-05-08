@@ -116,8 +116,39 @@ ulc_BlockProcess:
 .LDecodeCoefs_DecodeLoop:
 	SUBS	r8, r0, r7, lsl #0x1C    @ -QCoef -> r8?
 	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
+	BNE	.LDecodeCoefs_Normal
 
-@ NOTE: Coefficients decoded to 15bit precision to avoid overflows during decoding
+.LDecodeCoefs_NoiseFill:
+	NextNybble
+	AND	r8, r7, #0x0F         @ 0h,Zh,Yh,Xh: Noise fill (16 .. 271 coefficients)
+	NextNybble
+	ORR	r8, r8, r7, lsl #0x1C
+	NextNybble
+	MOV	r8, r8, ror #0x1C
+	ADD	r8, r8, #0x10
+	ANDS	ip, r7, #0x0F         @ v -> ip
+	ADD	ip, ip, #0x01         @ Scale = (v+1)^2 * Quant/8 -> ip (not scaled yet)
+	MULNE	ip, ip, ip
+	NextNybble
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -.3 for noise-fill quantizer, -5 for quantizer bias
+	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
+	BEQ	20f                   @ <- .LDecodeCoefs_EscapeCode loop
+	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= n
+0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
+	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
+1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
+	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
+	EOR	r8, r8, r8, lsr #0x11
+	EOR	r8, r8, r8, lsl #0x05
+	ADDS	lr, lr, #0x01<<8
+	STR	r1, [sl], #0x04
+	BCC	1b
+2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
+	MOV	r1, #0x00
+	CMP	fp, #0x010000
+	BCS	.LDecodeCoefs_DecodeLoop
+	B	.LDecodeCoefs_NoMoreCoefs
+
 .LDecodeCoefs_Normal:
 	NextNybble
 	MOVS	ip, r8, asr #0x10 @ 4.12fxp
@@ -135,18 +166,15 @@ ulc_BlockProcess:
 	ANDS	r8, r7, #0x0F @ Quantizer change? (8h,0h,Xh)
 	BEQ	.LDecodeCoefs_ChangeQuant
 	NextNybble
-1:	SUBS	ip, r8, #0x0E       @ 8h,1h..Dh:   3.. 15 zeros
-	BCC	2f
-	AND	r8, r7, #0x0F       @ 8h,Eh,Zh,Yh,Xh: 31 .. 286 noise samples, 8h,Fh,Yh,Xh: 31 .. 286 zeros
+1:	CMP	r8, #0x0E           @ 8h,1h..Eh:   Zero run ( 1 ..  14 coefficients)
+	BLS	2f
+	AND	r8, r7, #0x0F       @ 8h,Fh,Yh,Xh: Zero run (29 .. 284 coefficients)
 	NextNybble
 	ORR	r8, r8, r7, lsl #0x1C
 	NextNybble
 	MOV	r8, r8, ror #0x1C
-	ADD	r8, r8, #0x1F-2
-2:	ADD	r8, r8, #0x02
-	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= zR
-	CMP	ip, #0x00             @ Noise mode?
-	BEQ	.LDecodeCoefs_NoiseFill
+	ADD	r8, r8, #0x1D
+2:	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= zR
 20:	MOVS	ip, r8, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
 	STRMI	r0, [sl], #0x04
 	STMCSIA	sl!, {r0-r1}
@@ -155,29 +183,6 @@ ulc_BlockProcess:
 	SUBNES	r8, r8, #0x01
 	BNE	21b
 3:	CMP	fp, #0x010000
-	BCS	.LDecodeCoefs_DecodeLoop
-	B	.LDecodeCoefs_NoMoreCoefs
-
-.LDecodeCoefs_NoiseFill:
-	ANDS	ip, r7, #0x0F         @ v -> ip
-	ADD	ip, ip, #0x01         @ Scale = (v+1)^2 * Quant/8 -> ip (not scaled yet)
-	MULNE	ip, ip, ip
-	NextNybble
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -.3 for noise-fill quantizer, -5 for quantizer bias
-	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
-	BEQ	20b
-0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
-	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
-1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
-	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
-	EOR	r8, r8, r8, lsr #0x11
-	EOR	r8, r8, r8, lsl #0x05
-	ADDS	lr, lr, #0x01<<8
-	STR	r1, [sl], #0x04
-	BCC	1b
-2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
-	MOV	r1, #0x00
-	CMP	fp, #0x010000
 	BCS	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
@@ -388,7 +393,7 @@ ulc_BlockProcess:
 @ r4: &OutBuf
 @ r5: &LapBuf
 @ r6:  DecimationPattern
-@ r7:  NextOverlapSize | OverlapSize<<16
+@ r7:  OverlapSize
 @ r8: [Scratch]
 @ r9:  OverlapScale | SubBlockSize<<16
 @ sl: &TransformBuffer
@@ -403,8 +408,8 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_SubBlockProcess:
 	LDMIA	sp, {r3,r4}                        @ &State -> r3, &OutBuf[ | Chan<<31 | IsStereo] -> r4
-	LDRH	r9, [sp, #0x12]
-	LDRH	r7, [r3, #0x02]                    @ NextOverlapSize -> r7
+	LDRH	r9, [sp, #0x12]                    @ WindowCtrl (not yet masked) -> r9
+	LDRH	r7, [r3, #0x02]                    @ LastSubBlockSize -> r7
 	ADD	r5, sl, #0x04*ULC_MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE -> r5
 .if ULC_STEREO_SUPPORT
 	TST	r4, #0x80000000                    @ Second channel?
@@ -414,19 +419,20 @@ ulc_BlockProcess:
 .endif
 	ADR	r8, .LDecodeCoefs_Deinterleave_DecimationPattern
 	LDR	r6, [r8, r9, lsr #0x0C-2]      @ DecimationPattern -> r6
+	ORR	r9, r9, r7, lsl #0x10          @ WindowCtrl | LastSubBlockSize<<16 -> r9
 	@AND	r9, r9, #0x07                  @ OverlapScale -> r9 (masked on every loop iteration)
 
 .LDecodeCoefs_SubBlockLoop:
-	AND	r9, r9, #0x07         @ Clear old SubBlockSize
+	MOV	r7, r9, lsr #0x10     @ OverlapSize = LastSubBlockSize -> r7
 	AND	r8, r6, #0x07         @ SubBlockSize = BlockSize >> DecimationPattern[SubBlockIdx] -> r8
 	MOV	r8, fp, lsr r8
-	ORR	r9, r9, r8, lsl #0x10 @ OverlapScale | SubBlockSize<<16 -> r9
-	MOV	r7, r7, lsl #0x10     @ OverlapSize = NextOverlapSize
-	CMP	r7, r8, lsl #0x10     @ OverlapSize > SubBlockSize?
-	MOVHI	r7, r8, lsl #0x10     @  OverlapSize = SubBlockSize
+	AND	r9, r9, #0x07         @ Clear LastSubBlockSize (and decimation parameters, keeping only OverlapScale)
 	MOVS	r6, r6, lsr #0x04     @ Advance subblock decimation. Transient subblock?
-	ORRCS	r7, r7, r8, lsr r9    @  Y: NextOverlapSize = SubBlockSize >> OverlapScale
-	ORRCC	r7, r7, r8            @  N: NextOverlapSize = SubBlockSize
+	MOV	ip, r8                @ [TargetOverlapSize = SubBlockSize -> ip]
+	ORR	r9, r9, r8, lsl #0x10 @ [OverlapScale | SubBlockSize<<16 -> r9]
+	MOVCS	ip, ip, lsr r9        @  TargetOverlapSize >>= OverlapScale
+	CMP	r7, ip                @ if(OverlapSize > TargetOverlapSize) OverlapSize = TargetOverlapSize
+	MOVCS	r7, ip
 
 /**************************************/
 .if ULC_ALLOW_PITCH_SHIFT
@@ -510,8 +516,8 @@ ulc_PitchShiftKey: .word 0
 	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo (in TempBuffer) -> ip
 	ADD	lr, ip, r9, lsr #0x10-2          @ OutHi = OutLo+SubBlockSize -> lr
 	ADD	sl, sl, r9, lsr #0x10+1-2        @ Skip the next-block aliased samples (SrcBuf += SubBlockSize/2)
-	SUBS	r8, r7, r9                       @ Have any non-overlap samples? (-nNonOverlap = OverlapSize-SubBlockSize -> r8, high 16 bits)
-	BCS	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap @ NOTE: NextOverlapSize is always greater than OverlapScale, so this hacky condition works
+	SUBS	r8, r7, r9, lsr #0x10            @ Have any non-overlap samples? (-nNonOverlap = OverlapSize-SubBlockSize -> r8)
+	BCS	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap
 
 @ r0: [Scratch]
 @ r1: [Scratch]
@@ -520,8 +526,8 @@ ulc_PitchShiftKey: .word 0
 @ r4: &OutBuf
 @ r5: &Lap
 @ r6:  DecimationPattern
-@ r7:  NextOverlapSize | OverlapSize<<16
-@ r8:  xxxx | -nNonOverlapRem<<16
+@ r7:  OverlapSize
+@ r8:  -nNonOverlapRem
 @ r9:  OverlapScale | SubBlockSize<<16
 @ sl: &Src
 @ fp:  BlockSize
@@ -539,7 +545,7 @@ ulc_PitchShiftKey: .word 0
 	STR	r1, [lr, #-0x04]!
 	STR	r2, [lr, #-0x04]!
 	STR	r3, [lr, #-0x04]!
-	ADDS	r8, r8, #0x08<<16
+	ADDS	r8, r8, #0x08
 	BCC	0b
 1:	CMP	ip, lr @ End? (OutLo == OutHi)
 	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_End
@@ -551,7 +557,7 @@ ulc_PitchShiftKey: .word 0
 @ r4: &OutBuf
 @ r5: &Lap
 @ r6: [Scratch]
-@ r7: [Scratch, input is NextOverlapSize | OverlapSize<<16]
+@ r7: [Scratch, input is OverlapSize]
 @ r8: &CosSin
 @ r9:  OverlapScale | SubBlockSize<<16
 @ sl: &Src
@@ -561,7 +567,7 @@ ulc_PitchShiftKey: .word 0
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_Overlap:
 	LDR	r8, =Fourier_CosSin - 0x02*16
-	ADD	r8, r8, r7, lsr #0x10-1
+	ADD	r8, r8, r7, lsl #0x01
 0:	LDR	r0, [r8], #0x04       @ c | s<<16 -> r0
 	LDR	r2, [r5, #-0x04]!     @ a = *--Lap -> r2
 	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
@@ -710,9 +716,10 @@ ulc_PitchShiftKey: .word 0
 	LDMFD	sp!, {r6-r7}
 	CMP	r6, #0x00 @ Not finished with the decimation pattern?
 	BNE	.LDecodeCoefs_SubBlockLoop
-0:	MOV	r0, r7    @ Save NextOverlapSize
+0:	MOV	r0, r9, lsr #0x10 @ Save LastSubBlockSize
 	LDMFD	sp!, {r4-r7,r9}
 
+@ r0:  LastSubBlockSize
 @ r4: &State
 @ r5: &OutBuf | Chan<<31 | IsStereo
 @ r6: &NextData | NybbleCounter<<29
@@ -727,7 +734,7 @@ ulc_PitchShiftKey: .word 0
 	ADDS	r5, r5, r5, lsl #0x1F @ Stereo, second channel?
 	BMI	.LChannels_Loop
 .endif
-0:	STRH	r0, [r4, #0x02] @ Save OverlapSize = NextOverlapSize
+0:	STRH	r0, [r4, #0x02] @ Save LastSubBlockSize
 
 /**************************************/
 
