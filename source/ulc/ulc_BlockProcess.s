@@ -132,8 +132,8 @@ ulc_BlockProcess:
 	NextNybble
 	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -.3 for noise-fill quantizer, -5 for quantizer bias
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
-	BEQ	2f                    @ <- .LDecodeCoefs_EscapeCode loop
 	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= n
+	BEQ	20f                   @ <- .LDecodeCoefs_EscapeCode loop
 0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
 	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
 1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
