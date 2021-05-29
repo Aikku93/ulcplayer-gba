@@ -92,7 +92,6 @@ ulc_BlockProcess:
 	TST	r9, #0x08<<16                    @ Decimating?
 	ADDNE	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @  Store to TempBuffer for deinterleaving to TransformBuffer
 	SUB	fp, fp, fp, lsl #0x10
-	MVN	lr, #0x00                        @ Clear initial quantizer (detection for tail noise-fill)
 	B	.LDecodeCoefs_Start
 
 .LDecodeCoefs_ChangeQuant:
@@ -147,10 +146,10 @@ ulc_BlockProcess:
 	BEQ	.LDecodeCoefs_FillZeros
 
 .LDecodeCoefs_FillNoise:
-	MUL	ip, ip, ip            @ Scale = (v+1)^2 * Quant -> ip (not scaled yet)
+	MUL	ip, ip, ip            @ Scale = v^2 * Quant * 1/8 -> ip (not scaled yet)
 	ADD	r8, r8, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 527 noise samples (Xh.bit[1..3] != 0)
 	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ +.1 for .31->.32 scaling in rand(), -5 for quantizer bias
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -3 for noise quantization scaling, -5 for quantizer bias
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
@@ -199,16 +198,16 @@ ulc_BlockProcess:
 	AND	r8, r7, #0x0F               @ r -> r8
 	NextNybble
 	MOVS	ip, ip, lsr #0x01
-	ADD	ip, ip, #0x01               @ Unpack p ((v+1)^2 * Quant)
+	ADD	ip, ip, #0x01               @ Unpack p ((v+1)^2 * Quant * 1/8)
 	MULNE	ip, ip, ip
 	ADCS	r8, r8, r8                  @ Finish reading r
-	ADD	r8, r8, #0x01               @ Unpack Decay (1 - (r+1)^2*(1/128)^2)
+	ADD	r8, r8, #0x01               @ Unpack Decay (1 - (r+1)^2*(1/256)^2)
 	MULNE	r8, r8, r8
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ Same as normal noise fill. Scale -> ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
 	SUBEQ	r8, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
 	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	SUB	lr, r0, r8, lsl #0x20-(7*2) @ Decay = 1 - (Decay^2 / 128^2) [.32] -> lr
+	SUB	lr, r0, r8, lsl #0x20-(8*2) @ Decay = 1 - (Decay^2 / 256^2) [.32] -> lr
 	EOR	r8, r6, r7, ror #0x17       @ Seed = [random garbage] -> r8
 1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
 	UMULL	r0, ip, lr, ip        @ Scale *= Decay
@@ -438,17 +437,17 @@ ulc_BlockProcess:
 	LDR	r1, [lr, ip, lsl #0x02] @ Stp = 2^(-Key/12) [.14fxp] << 16 | Pos(=0)
 	MOV	r2, sl                  @ Src
 	MOV	r3, sl                  @ Dst
-0:	CMP	r1, #0x01<<14
+0:	SUBS	r8, r1, #0x01<<14
 	BEQ	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
 	MOV	r0, r9, lsr #0x10       @ BlockSize -> r0
 	BCC	.LDecodeCoefs_SubBlockLoop_PitchShift_Up
 
 .LDecodeCoefs_SubBlockLoop_PitchShift_Down:
+	MOV	r1, r8, lsl #0x10-14
 	ADD	r8, sl, r0, lsl #0x02
-1:	ADD	r1, r1, r1, lsl #0x10
-	MOV	lr, r1, lsr #0x10+14
-	LDR	ip, [r2], lr, lsl #0x02
-	BIC	r1, r1, lr, lsl #0x10+14
+1:	ADDS	r1, r1, r1, lsl #0x10
+	LDR	ip, [r2], #0x04
+	ADDCS	r2, r2, #0x04
 	CMP	r2, r8
 	STR	ip, [r3], #0x04
 	BCC	1b
@@ -474,20 +473,28 @@ ulc_PitchShiftKey: .word 0
 	.word 0x2851,0x260E,0x23EB,0x21E7,0x2000
 
 @ Iterate backwards to avoid reading overwritten data
+@ For a given rate r, we store 1/r samples on average.
+@ To correctly cancel the energy to unity gain, we must
+@ scale one of the coefficients by 1-1/r.
+@ I believe that this code is scaling the coefficient
+@ on the wrong side (ie. scaling should be (1-1/r)^n,
+@ but due to backwards iteration, we are instead using
+@ (1-1/r)^(1-n)), but seems to be fine for the most part.
 .LDecodeCoefs_SubBlockLoop_PitchShift_Up:
-	MUL	ip, r1, r0                  @ SrcPos = Rate * BlockSize+eps [.14fxp]
+	LDR	r8, [lr, -ip, lsl #0x02]    @ 1-1/r -> r8 [.14fxp -> .31fxp]
+	MUL	ip, r1, r0                  @ SrcPos = Rate * BlockSize [.14fxp]
 	ADD	r3, r3, r0, lsl #0x02       @ Dst = Buf + BlockSize   -> r3
-	ADD	ip, ip, #0x01
-	MOV	lr, ip, lsr #0x0E+1         @ Src = Buf + (int)(SrcPos/2)*2 -> r2 (always align to 2 coefficients)
-	ADD	r2, r2, lr, lsl #0x02+1
+	MOV	lr, ip, lsr #0x0E           @ Src = Buf + (int)SrcPos -> r2
+	RSB	r8, r8, #0x01<<14
+	MOV	r8, r8, lsl #0x1F-14
+	LDR	r0, [r2, lr, lsl #0x02]!    @ Coef -> r0
 	ADD	lr, r1, ip, lsl #0x10+16-14 @ Rate [.14fxp] | SubPos<<16 [.16fxp]
-	LDMDB	r2!, {r8,ip}                @ Coef -> r8,ip
-	MOV	r0, #0x00
-	MOV	r1, #0x00
 1:	SUBS	lr, lr, lr, lsl #0x10+16-14 @ SubPos += Rate?
-	STMCCDB	r3!, {r8,ip}                @  Wrapped: Store coefficients
-	LDMCCDB	r2!, {r8,ip}                @           Load next coefficients
-	STMCSDB	r3!, {r0-r1}                @  No wrap: Store 0s
+	STR	r0, [r3, #-0x04]!
+	SMULLCS	r0, r1, r8, r0              @ Not wrapped: Scale/cancel
+	LDRCC	r0, [r2, #-0x04]!           @ Wrapped: Load next coefficients
+	MOVCS	r0, r0, lsr #0x1F
+	ORRCS	r0, r0, r1, lsl #0x01
 	CMP	r3, sl                      @ Hit the start?
 	BHI	1b
 2:	@B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
