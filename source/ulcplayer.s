@@ -1022,7 +1022,7 @@ SoundFiles:
 
 	.LSoundFiles_OriginSongName:
 	 11: .asciz "Rayvolt - And We Run"                                @ Q=55
-	 21: .asciz "Vertex - Run It Up"                                  @ Q=54
+	 21: .asciz "Vertex - Run It Up"                                  @ Q=53
 	 31: .asciz "Vertex - Get Down"                                   @ Q=55
 	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"            @ Q=55
 	 51: .asciz "Vertex - Collective Paranoia"                        @ Q=55
@@ -1031,7 +1031,7 @@ SoundFiles:
 	 81: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"            @ Q=55
 	 91: .asciz "Juju Rush - Catching Fire"                           @ Q=55
 	101: .asciz "Vertex - Let It Roll"                                @ Q=54
-	111: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)" @ Q=65
+	111: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)" @ Q=55
 	121: .asciz "Toto - Africa (Rayvolt Remix)"                       @ Q=55
 	131: .asciz "Rayvolt - Wellerman"                                 @ Q=55
 	141: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"    @ Q=55
@@ -1069,7 +1069,7 @@ SoundFiles:
 	.LSoundFiles_OriginSongName:
 	11: .asciz "Rayvolt - Start The Revolt: Live Yearmix 2020"
 
-	.balign 4; 10: .incbin "source/music/Rayvolt2020/Rayvolt - Start The Revolt Live Yearmix 2020.ulc" @ Q=53.25 (63.2kbps)
+	.balign 4; 10: .incbin "source/music/Rayvolt2020/Rayvolt - Start The Revolt Live Yearmix 2020.ulc" @ Q=53 (63.2kbps)
 .endif
 
 .size SoundFiles, .-SoundFiles
