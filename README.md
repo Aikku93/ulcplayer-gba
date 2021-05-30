@@ -33,12 +33,12 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built tracks (Last update: 2021/05/29)
+## Pre-built tracks (Last update: 2021/05/30)
 
 ### Frenchcore Mix
 
 Files:
- * [~64kbps VBR (Q=54..55) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~64kbps VBR (Q=53..55) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Rayvolt - And We Run
