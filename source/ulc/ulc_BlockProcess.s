@@ -15,12 +15,13 @@
 
 @ Returns the number of bytes read
 
-.equ QSCALE_BASE, (0x8028 | (0x18+5 - ULC_COEF_PRECISION)<<7) @ "MOV r8, r8, lsr #X", lower hword
+.equ QSCALE_BASE, (0x5025 | (0x18+5 - ULC_COEF_PRECISION)<<7) @ "MOV r5, r5, lsr #X", lower hword
+.equ QSCALE_ZERO, 0x5025 @ "MOV r5, r5, lsr #32", lower hword
 
 ulc_BlockProcess:
 	STMFD	sp!, {r4-fp,lr}
 	LDR	r4, =ulc_State
-	LDR	r5, =ulc_OutputBuffer
+	LDR	r3, =ulc_OutputBuffer
 	LDRB	r0, [r4, #0x01]           @ nBufProc -> r0
 	LDMIB	r4, {r1-r2,r6}            @ WrBufIdx | Pause<<1 | nBlkRem<<2 -> r1, &File -> r2, &NextData -> r6
 	CMP	r2, #0x00                 @ !File? Early exit to avoid reading from NULL
@@ -35,27 +36,28 @@ ulc_BlockProcess:
 	MOVS	ip, ip, lsl #0x03
 	MOVNE	r7, r7, lsr ip
 .if ULC_STEREO_SUPPORT
-	CMP	r2, #0x02                 @ Set stereo flag as needed
-	ORREQ	r5, r5, #0x01
+	ORR	r3, r3, r2, lsr #0x01     @ Set stereo flag as needed (nChan can only be 1 or 2, so this is safe)
 .endif
 0:	SUBS	r0, r0, #0x01             @ --nBufProc?
 	BCC	.LNoBufProc
 	STRB	r0, [r4, #0x01]           @ <- This assumes that ulc_BlockProcess is called at least once between timer interrupts (race condition)
 	EOR	r1, r1, #0x01             @ WrBufIdx ^= 1
 	MOVS	r0, r1, lsl #0x1F         @ N=WrBufIdx?, C=Pause?
-	ADDPL	r5, r5, fp                @ Move to second buffer as needed
+	ADDPL	r3, r3, fp                @ Move to second buffer as needed
 	BCS	.LOutputPaused
 	SUBS	r1, r1, #0x01<<2          @ --nBlkRem?
 	BCC	.LNoBlocksRem
 	STR	r1, [r4, #0x04]
+	LDRH	r4, [r4, #0x02]           @ LastSubBlockSize -> r4
 	MOV	r9, #QSCALE_BASE & 0xFF00
 	ORR	r9, r9, #QSCALE_BASE & 0xFF
+	STR	r3, [sp, #-0x04]!         @ No need to stash LastSubBlockSize for mono only
 
 .LReadBlockHeader:
-	AND	r8, r7, #0x0F         @ QScaleBase | WindowCtrl<<16 -> r9
-	ORR	r9, r9, r8, lsl #0x10
+	AND	r5, r7, #0x0F         @ QScaleBase | WindowCtrl<<16 -> r9
+	ORR	r9, r9, r5, lsl #0x10
 	NextNybble
-	TST	r8, #0x08             @ Decimating?
+	TST	r5, #0x08             @ Decimating?
 	BEQ	1f
 0:	ORR	r9, r9, r7, lsl #0x1C @  Append decimation control to upper bits
 	NextNybble
@@ -63,189 +65,67 @@ ulc_BlockProcess:
 
 /**************************************/
 
-@ r0: 0
-@ r1: 0
-@ r2: 0
-@ r3: 0
-@ r4: &State
-@ r5: &OutBuf | Chan<<31 | IsStereo
+@ r0:
+@ r1:
+@ r2:
+@ r3:
+@ r4:  LastSubBlockSize
+@ r5:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
-@ r8: [Scratch]
+@ r8:  DecimationPattern
 @ r9:  QScaleBase | WindowCtrl<<16
-@ sl: &CoefDst
-@ fp:  BlockSize | -CoefRem<<16
-@ ip: [Scratch]
-@ lr: Log2[Quant]
+@ sl:
+@ fp:  BlockSize
+@ ip:
+@ lr:
 @ NOTE: WindowCtrl is stored as:
 @  b0..2:   OverlapScale
 @  b3:      Decimation toggle
 @  b4..11:  Unused
-@  b12..15: Decimation pattern (0b0000 == 0b0001 == No decimation)
+@  b12..15: Decimation (0b0000 == 0b0001 == No decimation)
 
 .LChannels_Loop:
-	MOV	r0, #0x00                        @ 0 -> r0,r1,r2,r3
-	MOV	r1, #0x00
-	MOV	r2, #0x00
-	MOV	r3, #0x00
-	LDR	sl, =ulc_TransformBuffer
-	TST	r9, #0x08<<16                    @ Decimating?
-	ADDNE	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @  Store to TempBuffer for deinterleaving to TransformBuffer
-	SUB	fp, fp, fp, lsl #0x10
-	B	.LDecodeCoefs_Start
-
-.LDecodeCoefs_ChangeQuant:
-	NextNybble
-
-.LDecodeCoefs_Start:
-	AND	ip, r7, #0x0F
-	NextNybble
-	CMP	ip, #0x0E                         @ Normal quantizer? (8h,0h,0h..Dh)
-	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (8h,0h,Fh,Yh,Xh)
-	MOVCC	lr, ip
-	BCC	1f
-0:	AND	ip, r7, #0x0F
-	NextNybble
-	CMP	ip, #0x0F                         @ Stop? (8h,0h,Eh,Fh)
-	SUBEQ	r8, r0, fp, asr #0x10             @  Treat as zero-fill with N=CoefRem
-	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	ADD	lr, ip, #0x0E                     @ Extended-precision quantizer (8h,0h,Eh,0h..Ch)
-	CMP	lr, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
-	SUBCS	r8, r9, #QSCALE_BASE - 0x8028
-1:	ADDCC	r8, r9, lr, lsl #0x07             @ Modify the quantizer instruction
-	STRH	r8, .LDecodeCoefs_Normal_Shifter
-
-.LDecodeCoefs_DecodeLoop:
-	SUBS	r8, r0, r7, lsl #0x1C    @ -QCoef -> r8?
-	BEQ	.LDecodeCoefs_FillRun    @ Zeros/noise run? (0h)
-	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
-
-.LDecodeCoefs_Normal:
-	NextNybble
-	MOVS	ip, r8, asr #0x10 @ 4.12fxp
-	MULNE	r8, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
-.LDecodeCoefs_Normal_Shifter:
-	MOV	r8, r8, lsr #0x00 @ Coef=QCoef*2^(-24+ACCURACY-Quant) -> r8 (NOTE: Self-modifying dequantization)
-	RSBMI	r8, r8, #0x00     @ Restore sign after dequantization (round towards 0)
-	STR	r8, [sl], #0x04   @ Coefs[n++] = Coef
-	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
-	BCC	.LDecodeCoefs_DecodeLoop
-1:	B	.LDecodeCoefs_NoMoreCoefs
-
-.LDecodeCoefs_FillRun:
-	NextNybble
-	AND	r8, r7, #0x0F @ n -> r8 (not yet biased)
-	NextNybble
-	ORR	r8, r8, r7, lsl #0x1C
-	MOV	r8, r8, ror #0x1C
-	NextNybble
-	AND	ip, r7, #0x0F
-	NextNybble
-	MOVS	ip, ip, lsr #0x01 @ v -> ip
-	ADC	r8, r8, r8
-	BEQ	.LDecodeCoefs_FillZeros
-
-.LDecodeCoefs_FillNoise:
-	MUL	ip, ip, ip            @ Scale = v^2 * Quant * 1/8 -> ip (not scaled yet)
-	ADD	r8, r8, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 527 noise samples (Xh.bit[1..3] != 0)
-	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ +.1 for .31->.32 scaling in rand(), -3 for noise quantization scaling, -5 for quantizer bias
-	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
-	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
-0:	SUB	lr, lr, r8, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
-	EOR	r8, r6, r7, ror #0x17 @ Seed = [random garbage] -> r8
-1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
-	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
-	EOR	r8, r8, r8, lsr #0x11
-	EOR	r8, r8, r8, lsl #0x05
-	ADDS	lr, lr, #0x01<<8
-	STR	r1, [sl], #0x04
-	BCC	1b
-2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
-	MOV	r1, #0x00
-	CMP	fp, #0x010000
-	BCS	.LDecodeCoefs_DecodeLoop
-	B	.LDecodeCoefs_NoMoreCoefs
-
-.LDecodeCoefs_EscapeCode:
-	NextNybble
-	ANDS	r8, r7, #0x0F           @ Quantizer change? (8h,0h,Xh)
-	BEQ	.LDecodeCoefs_ChangeQuant
-	NextNybble
-	@B	.LDecodeCoefs_FillZeros @ 8h,1h..Fh: Zero run (1 .. 15 coefficients)
-	@ Z=1 cannot happen from NextNybble macro, so biasing is not used in fall-through
-
-@ Must enter with Z=1 to trigger biasing
-.LDecodeCoefs_FillZeros:
-	ADDEQ	r8, r8, #0x1F         @ 0h,Zh,Yh,Xh: 31 .. 542 zeros (Xh.bit[1..3] == 0)
-.LDecodeCoefs_FillZeros_PostBiasCore:
-	ADD	fp, fp, r8, lsl #0x10 @ CoefRem -= zR
-.LDecodeCoefs_FillZeros_PostDecCore:
-0:	MOVS	ip, r8, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
-	STRMI	r0, [sl], #0x04
-	STMCSIA	sl!, {r0-r1}
-	MOVS	r8, r8, lsr #0x02
-1:	STMNEIA	sl!, {r0-r3}
-	SUBNES	r8, r8, #0x01
-	BNE	1b
-2:	CMP	fp, #0x010000
-	BCS	.LDecodeCoefs_DecodeLoop
-	B	.LDecodeCoefs_NoMoreCoefs
-
-.LDecodeCoefs_Stop_NoiseFill:
-	AND	ip, r7, #0x0F               @ v -> ip
-	NextNybble
-	AND	r8, r7, #0x0F               @ r -> r8
-	NextNybble
-	MOVS	ip, ip, lsr #0x01
-	ADD	ip, ip, #0x01               @ Unpack p ((v+1)^2 * Quant * 1/8)
-	MULNE	ip, ip, ip
-	ADCS	r8, r8, r8                  @ Finish reading r
-	ADD	r8, r8, #0x01               @ Unpack Decay (1 - (r+1)^2*(1/256)^2)
-	MULNE	r8, r8, r8
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 3 - 5 @ Same as normal noise fill. Scale -> ip
-	MOVS	ip, ip, lsr lr
-	SUBEQ	r8, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
-	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	SUB	lr, r0, r8, lsl #0x20-(8*2) @ Decay = 1 - (Decay^2 / 256^2) [.32] -> lr
-	EOR	r8, r6, r7, ror #0x17       @ Seed = [random garbage] -> r8
-1:	SMULL	r0, r1, r8, ip        @ Rand*Scale -> r0,r1
-	UMULL	r0, ip, lr, ip        @ Scale *= Decay
-	EOR	r8, r8, r8, lsl #0x0D @ <- Xorshift generator
-	EOR	r8, r8, r8, lsr #0x11
-	EOR	r8, r8, r8, lsl #0x05
-	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
-	STR	r1, [sl], #0x04
-	BCC	1b
-
-.LDecodeCoefs_NoMoreCoefs:
-	SUB	sl, sl, fp, lsl #0x02 @ Rewind buffer
+	ADR	r8, .LDecodeCoefs_DecimationPattern
+	LDR	r8, [r8, r9, lsr #0x1C-2] @ DecimationPattern -> r8
 
 /**************************************/
 
-.LDecodeCoefs_Deinterleave:
-	STMFD	sp!, {r4-r7,r9}
-	ANDS	r8, r9, #0xE0000000              @ Lowermost bit controls which side gets overlap scaling only, so ignore it
-	SUBNE	r0, sl, #0x04*ULC_MAX_BLOCK_SIZE @  DstA = TransformBuffer(=TempBuffer-MAX_BLOCK_SIZE)
-	SUBNE	fp, fp, fp, lsl #0x10            @  Cnt  = BlockSize
-	LDRNE	pc, [pc, r8, lsr #0x1C+1-2]
-	BEQ	.LDecodeCoefs_NoDeinterleave
-.if 0
-	.word	.LDecodeCoefs_NoDeinterleave @ Unused
-.else
-	.LZeroWord: .word 0 @ Since this space goes unused, put it to good use
-.endif
-	.word	.LDecodeCoefs_Deinterleave_N2_N2
-	.word	.LDecodeCoefs_Deinterleave_N4_N4_N2
-	.word	.LDecodeCoefs_Deinterleave_N2_N4_N4
-	.word	.LDecodeCoefs_Deinterleave_N8_N8_N4_N2
-	.word	.LDecodeCoefs_Deinterleave_N4_N8_N8_N2
-	.word	.LDecodeCoefs_Deinterleave_N2_N8_N8_N4
-	.word	.LDecodeCoefs_Deinterleave_N2_N4_N8_N8
+@ r0: 0
+@ r1: 0
+@ r2: 0
+@ r3: 0
+@ r4:  LastSubBlockSize|SubBlockSize<<16
+@ r5: [Scratch]
+@ r6: &NextData | NybbleCounter<<29
+@ r7:  StreamData
+@ r8:  DecimationPattern
+@ r9:  QScaleBase | WindowCtrl<<16
+@ sl: &CoefDst
+@ fp:  BlockSize | -CoefRem<<16
+@ ip: [Scratch]
+@ lr:  Log2[Quant]
 
-.LDecodeCoefs_Deinterleave_DecimationPattern:
+.LDecodeCoefs_SubBlockLoop:
+	MOV	r0, #0x00     @ 0 -> r0,r1,r2,r3
+	MOV	r1, #0x00
+	MOV	r2, #0x00
+	MOV	r3, #0x00
+	AND	r5, r8, #0x07 @ CoefRem = BlockSize >> (DecimationPattern&0x7)
+	MOV	r5, fp, lsr r5
+	ORR	r4, r4, r5, lsl #0x10 @ LastSubBlockSize|SubBlockSize<<16 -> r4
+	SUB	fp, fp, r5, lsl #0x10
+	LDR	sl, =ulc_TransformBuffer
+	B	.LDecodeCoefs_Start
+
+.LDecodeCoefs_DecimationPattern:
 	.word (0+8)                                   @ 0000: N/1*
-	.word (0+8)                                   @ 0001: N/1* (technically unused, maps to above)
+.if 0
+	.word (0+8)                                   @ 0001: N/1* (unused, mapped to above)
+.else
+.LZeroWord:
+	.word 0
+.endif
 	.word (1+8) | (1  )<<4                        @ 0010: N/2* | N/2
 	.word (1  ) | (1+8)<<4                        @ 0011: N/2  | N/2*
 	.word (2+8) | (2  )<<4 | (1  )<<8             @ 0100: N/4* | N/4  | N/2
@@ -261,211 +141,174 @@ ulc_BlockProcess:
 	.word (1  ) | (2  )<<4 | (3+8)<<8 | (3  )<<12 @ 1110: N/2  | N/4  | N/8* | N/8
 	.word (1  ) | (2  )<<4 | (3  )<<8 | (3+8)<<12 @ 1111: N/2  | N/4  | N/8  | N/8*
 
-@ r0: &DstA
-@ r1: &DstB
-@ r2: &DstC
-@ r3: &DstD
-@ r4: [Pushed/Scratch]
-@ r5: [Pushed/Scratch]
-@ r6: [Pushed/Scratch]
-@ r7: [Pushed/Scratch]
-@ r8: [Scratch]
-@ r9: [Pushed/Scratch]
-@ sl: &SrcBuf
-@ fp:  BlockSize | -BlockSize<<16
-@ ip: [Scratch]
-@ lr: [Scratch]
-@ sp+00h: &State
-@ sp+04h: &OutBuf | Chan<<31 | IsStereo
-@ sp+08h: &NextData | NybbleCounter<<29
-@ sp+0Ch:  StreamData
-@ sp+10h:  QScaleBase | WindowCtrl
+.LDecodeCoefs_ChangeQuant:
+	NextNybble
 
-.LDecodeCoefs_Deinterleave_N2_N2:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r3, r0, fp, asr #0x10+1-2 @ DstB = DstA + N/2
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4,r6,r8,ip}
-	STMIA	r3!, {r5,r7,r9,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_Start:
+	AND	r5, r7, #0x0F
+	NextNybble
+	CMP	r5, #0x0E                         @ Normal quantizer? (8h,0h,0h..Dh)
+	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (8h,0h,Fh,Zh,Yh[,Xh])
+	MOVCC	lr, r5
+	BCC	1f
+0:	AND	r5, r7, #0x0F
+	NextNybble
+	CMP	r5, #0x0F                         @ Stop? (8h,0h,Eh,Fh)
+	SUBEQ	r5, r0, fp, asr #0x10             @  Treat as zero-fill with N=CoefRem
+	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
+	ADD	lr, r5, #0x0E                     @ Extended-precision quantizer (8h,0h,Eh,0h..Ch)
+	CMP	lr, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
+	EORCS	r5, r9, #QSCALE_BASE ^ QSCALE_ZERO
+1:	ADDCC	r5, r9, lr, lsl #0x07             @ Modify the quantizer instruction
+	STRH	r5, .LDecodeCoefs_Normal_Shifter
 
-.LDecodeCoefs_Deinterleave_N4_N4_N2:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r2, r0, fp, asr #0x10+2-2 @ DstB = DstA + N/4
-	SUB	r3, r2, fp, asr #0x10+2-2 @ DstC = DstB + N/4
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4,r8}
-	STMIA	r2!, {r5,r9}
-	STMIA	r3!, {r6-r7,ip,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_DecodeLoop:
+	SUBS	r5, r0, r7, lsl #0x1C    @ -QCoef -> r5?
+	BEQ	.LDecodeCoefs_FillRun    @ Zeros/noise run? (0h)
+	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
 
-.LDecodeCoefs_Deinterleave_N2_N4_N4:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r2, r0, fp, asr #0x10+1-2 @ DstB = DstA + N/2
-	SUB	r3, r2, fp, asr #0x10+2-2 @ DstC = DstB + N/4
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4-r5,r8-r9}
-	STMIA	r2!, {r6,ip}
-	STMIA	r3!, {r7,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_Normal:
+	NextNybble
+	MOVS	ip, r5, asr #0x10 @ 4.12fxp
+	MULNE	r5, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
+.LDecodeCoefs_Normal_Shifter:
+	MOV	r5, r5, lsr #0x00 @ Coef=QCoef*2^(-24+ACCURACY-Quant) -> r5 (NOTE: Self-modifying dequantization)
+	RSBMI	r5, r5, #0x00     @ Restore sign after dequantization (round towards 0)
+	STR	r5, [sl], #0x04   @ Coefs[n++] = Coef
+	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
+	BCC	.LDecodeCoefs_DecodeLoop
+1:	B	.LDecodeCoefs_NoMoreCoefs
 
-.LDecodeCoefs_Deinterleave_N8_N8_N4_N2:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r1, r0, fp, asr #0x10+3-2 @ DstB = DstA + N/8
-	SUB	r2, r1, fp, asr #0x10+3-2 @ DstC = DstB + N/8
-	SUB	r3, r2, fp, asr #0x10+2-2 @ DstD = DstC + N/4
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STR	r4, [r0], #0x04
-	STR	r5, [r1], #0x04
-	STMIA	r2!, {r6-r7}
-	STMIA	r3!, {r8-r9,ip,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_FillRun:
+	NextNybble
+	AND	r5, r7, #0x0F @ n -> r5 (not yet biased)
+	NextNybble
+	AND	ip, r7, #0x0F
+	ORR	r5, ip, r5, lsl #0x04
+	NextNybble
+	AND	ip, r7, #0x0F
+	NextNybble
+	MOVS	ip, ip, lsr #0x01 @ v -> ip
+	ADC	r5, r5, r5
+	BEQ	.LDecodeCoefs_FillZeros
 
-.LDecodeCoefs_Deinterleave_N4_N8_N8_N2:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r1, r0, fp, asr #0x10+2-2 @ DstB = DstA + N/4
-	SUB	r2, r1, fp, asr #0x10+3-2 @ DstC = DstB + N/8
-	SUB	r3, r2, fp, asr #0x10+3-2 @ DstD = DstC + N/8
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4-r5}
-	STR	r6, [r1], #0x04
-	STR	r7, [r2], #0x04
-	STMIA	r3!, {r8-r9,ip,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_FillNoise:
+	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 527 noise samples (Xh.bit[1..3] != 0)
+	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ Scale = v*Quant -> ip? (+.1 for .31->.32 scaling in rand(), -5 for quantizer bias)
+	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
+	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
+0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
+	EOR	r5, r6, r7, ror #0x17 @ Seed = [random garbage] -> r5
+1:	SMULL	r0, r1, r5, ip        @ Rand*Scale -> r0,r1
+	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift generator
+	EOR	r5, r5, r5, lsr #0x11
+	EOR	r5, r5, r5, lsl #0x05
+	ADDS	lr, lr, #0x01<<8
+	STR	r1, [sl], #0x04
+	BCC	1b
+2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
+	MOV	r1, #0x00
+	CMP	fp, #0x010000
+	BCS	.LDecodeCoefs_DecodeLoop
+	B	.LDecodeCoefs_NoMoreCoefs
 
-.LDecodeCoefs_Deinterleave_N2_N8_N8_N4:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r1, r0, fp, asr #0x10+1-2 @ DstB = DstA + N/2
-	SUB	r2, r1, fp, asr #0x10+3-2 @ DstC = DstB + N/8
-	SUB	r3, r2, fp, asr #0x10+3-2 @ DstD = DstC + N/8
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4-r7}
-	STR	r8, [r1], #0x04
-	STR	r9, [r2], #0x04
-	STMIA	r3!, {ip,lr}
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	B	.LDecodeCoefs_DeinterleaveComplete
+.LDecodeCoefs_EscapeCode:
+	NextNybble
+	ANDS	r5, r7, #0x0F           @ Quantizer change? (8h,0h,Xh)
+	BEQ	.LDecodeCoefs_ChangeQuant
+	NextNybble
+	@B	.LDecodeCoefs_FillZeros @ 8h,1h..Fh: Zero run (1 .. 15 coefficients)
+	@ Z=1 cannot happen from NextNybble macro, so biasing is not used in fall-through
 
-.LDecodeCoefs_Deinterleave_N2_N4_N8_N8:
-	@MOV	r0, r0                    @ DstA = TransformBuffer
-	SUB	r1, r0, fp, asr #0x10+1-2 @ DstB = DstA + N/2
-	SUB	r2, r1, fp, asr #0x10+2-2 @ DstC = DstB + N/4
-	SUB	r3, r2, fp, asr #0x10+3-2 @ DstD = DstC + N/8
-0:	LDMIA	sl!, {r4-r9,ip,lr}
-	STMIA	r0!, {r4-r7}
-	STMIA	r1!, {r8-r9}
-	STR	ip, [r2], #0x04
-	STR	lr, [r3], #0x04
-	ADDS	fp, fp, #0x08<<16
-	BCC	0b
-0:	@B	.LDecodeCoefs_DeinterleaveComplete
+@ Must enter with Z=1 to trigger biasing
+.LDecodeCoefs_FillZeros:
+	ADDEQ	r5, r5, #0x1F         @ 0h,Zh,Yh,Xh: 31 .. 542 zeros (Xh.bit[1..3] == 0)
+.LDecodeCoefs_FillZeros_PostBiasCore:
+	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= zR
+.LDecodeCoefs_FillZeros_PostDecCore:
+0:	MOVS	ip, r5, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
+	STRMI	r0, [sl], #0x04
+	STMCSIA	sl!, {r0-r1}
+	MOVS	r5, r5, lsr #0x02
+1:	STMNEIA	sl!, {r0-r3}
+	SUBNES	r5, r5, #0x01
+	BNE	1b
+2:	CMP	fp, #0x010000
+	BCS	.LDecodeCoefs_DecodeLoop
+	B	.LDecodeCoefs_NoMoreCoefs
 
-.LDecodeCoefs_DeinterleaveComplete:
-	SUB	sl, r3, fp, lsl #0x02 @ Rewind TransformBuffer(=LastDstBuf-BlockSize) as coefficient source
-.LDecodeCoefs_NoDeinterleave:
+.LDecodeCoefs_Stop_NoiseFill:
+	AND	ip, r7, #0x0F               @ v -> ip
+	NextNybble
+	AND	r5, r7, #0x0F               @ r -> r5
+	NextNybble
+	MOVS	ip, ip, lsr #0x01
+	BCC	1f
+0:	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
+	MOV	r5, r5, ror #0x1C
+	NextNybble
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)*Quant
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ Same as normal noise fill. Scale -> ip
+	MOVS	ip, ip, lsr lr
+	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
+	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
+	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
+	SUB	lr, r0, lr, lsl #0x20-16
+	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
+1:	SMULL	r0, r1, r5, ip        @ Rand*Scale -> r0,r1
+	UMULL	r0, ip, lr, ip        @ Scale *= Decay
+	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift generator
+	EOR	r5, r5, r5, lsr #0x11
+	EOR	r5, r5, r5, lsl #0x05
+	ADDS	fp, fp, #0x01<<16     @ --CoefRem?
+	STR	r1, [sl], #0x04
+	BCC	1b
 
-/**************************************/
-
-@ r0: [Scratch]
-@ r1: [Scratch]
-@ r2: [Scratch]
-@ r3: [Scratch]
-@ r4: &OutBuf
-@ r5: &LapBuf
-@ r6:  DecimationPattern
-@ r7:  OverlapSize
-@ r8: [Scratch]
-@ r9:  OverlapScale | SubBlockSize<<16
-@ sl: &TransformBuffer
-@ fp:  BlockSize
-@ ip: [Scratch]
-@ lr: [Scratch]
-@ sp+00h: &State
-@ sp+04h: &OutBuf | Chan<<31 | IsStereo
-@ sp+08h: &NextData | NybbleCounter<<29
-@ sp+0Ch:  StreamData
-@ sp+10h:  QScaleBase | WindowCtrl
-
-.LDecodeCoefs_SubBlockProcess:
-	LDMIA	sp, {r3,r4}                        @ &State -> r3, &OutBuf[ | Chan<<31 | IsStereo] -> r4
-	LDRH	r9, [sp, #0x12]                    @ WindowCtrl (not yet masked) -> r9
-	LDRH	r7, [r3, #0x02]                    @ LastSubBlockSize -> r7
-	ADD	r5, sl, #0x04*ULC_MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE -> r5
-.if ULC_STEREO_SUPPORT
-	TST	r4, #0x80000000                    @ Second channel?
-	BIC	r4, r4, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
-	ADDNE	r4, r4, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel
-	ADDNE	r5, r5, #0x04*ULC_MAX_BLOCK_SIZE/2
-.endif
-	ADR	r8, .LDecodeCoefs_Deinterleave_DecimationPattern
-	LDR	r6, [r8, r9, lsr #0x0C-2]      @ DecimationPattern -> r6
-	ORR	r9, r9, r7, lsl #0x10          @ WindowCtrl | LastSubBlockSize<<16 -> r9
-	@AND	r9, r9, #0x07                  @ OverlapScale -> r9 (masked on every loop iteration)
-
-.LDecodeCoefs_SubBlockLoop:
-	MOV	r7, r9, lsr #0x10     @ OverlapSize = LastSubBlockSize -> r7
-	AND	r8, r6, #0x07         @ SubBlockSize = BlockSize >> DecimationPattern[SubBlockIdx] -> r8
-	MOV	r8, fp, lsr r8
-	AND	r9, r9, #0x07         @ Clear LastSubBlockSize (and decimation parameters, keeping only OverlapScale)
-	MOVS	r6, r6, lsr #0x04     @ Advance subblock decimation. Transient subblock?
-	MOV	ip, r8                @ [TargetOverlapSize = SubBlockSize -> ip]
-	ORR	r9, r9, r8, lsl #0x10 @ [OverlapScale | SubBlockSize<<16 -> r9]
-	MOVCS	ip, ip, lsr r9        @  TargetOverlapSize >>= OverlapScale
-	CMP	r7, ip                @ if(OverlapSize > TargetOverlapSize) OverlapSize = TargetOverlapSize
-	MOVCS	r7, ip
+.LDecodeCoefs_NoMoreCoefs:
+	SUB	sl, sl, r4, lsr #0x10-2 @ Rewind buffer
 
 /**************************************/
 .if ULC_ALLOW_PITCH_SHIFT
 /**************************************/
 
-@ No point in optimizing this too much
+@ No point in optimizing this too much, mostly a joke
 
-.LDecodeCoefs_SubBlockLoop_PitchShift:
+.LDecodeCoefs_PitchShift:
 	LDR	ip, ulc_PitchShiftKey
-	ADR	lr, .LDecodeCoefs_SubBlockLoop_PitchShift_KeyScale + 0x04*12
+	ADR	lr, .LDecodeCoefs_PitchShift_KeyScale + 0x04*12
 	LDR	r1, [lr, ip, lsl #0x02] @ Stp = 2^(-Key/12) [.14fxp] << 16 | Pos(=0)
 	MOV	r2, sl                  @ Src
 	MOV	r3, sl                  @ Dst
-0:	SUBS	r8, r1, #0x01<<14
-	BEQ	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
-	MOV	r0, r9, lsr #0x10       @ BlockSize -> r0
-	BCC	.LDecodeCoefs_SubBlockLoop_PitchShift_Up
+0:	SUBS	r5, r1, #0x01<<14
+	BEQ	.LDecodeCoefs_PitchShiftComplete
+	MOV	r0, r4, lsr #0x10       @ SubBlockSize -> r0
+	BCC	.LDecodeCoefs_PitchShift_Up
 
-.LDecodeCoefs_SubBlockLoop_PitchShift_Down:
-	MOV	r1, r8, lsl #0x10-14
-	ADD	r8, sl, r0, lsl #0x02
+.LDecodeCoefs_PitchShift_Down:
+	MOV	r1, r5, lsl #0x10-14
+	ADD	r5, sl, r0, lsl #0x02
 1:	ADDS	r1, r1, r1, lsl #0x10
 	LDR	ip, [r2], #0x04
 	ADDCS	r2, r2, #0x04
-	CMP	r2, r8
+	CMP	r2, r5
 	STR	ip, [r3], #0x04
 	BCC	1b
 2:	MOV	ip, #0x00
 	MOV	lr, #0x00
-	SUB	r2, r8, r3
+	SUB	r2, r5, r3
 	MOVS	r2, r2, lsr #0x01+2
 	STRCS	ip, [r3], #0x04
 	MOVS	r2, r2, lsr #0x01
 22:	STMNEIA	r3!, {ip,lr}
 	SUBNES	r2, r2, #0x01
 	BNE	22b
-3:	B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+3:	B	.LDecodeCoefs_PitchShiftComplete
 
 ulc_PitchShiftKey: .word 0
 .global ulc_PitchShiftKey
 
-.LDecodeCoefs_SubBlockLoop_PitchShift_KeyScale: @ Floor[Table[2^(14-n/12), {n,-12,+12}] + 0.5]
+.LDecodeCoefs_PitchShift_KeyScale: @ Floor[Table[2^(14-n/12), {n,-12,+12}] + 0.5]
 	.word 0x7FFF,0x78D1,0x7209,0x6BA2,0x6598
 	.word 0x5FE4,0x5A82,0x556E,0x50A3,0x4C1C
 	.word 0x47D6,0x43CE,0x4000,0x3C68,0x3904
@@ -480,61 +323,114 @@ ulc_PitchShiftKey: .word 0
 @ on the wrong side (ie. scaling should be (1-1/r)^n,
 @ but due to backwards iteration, we are instead using
 @ (1-1/r)^(1-n)), but seems to be fine for the most part.
-.LDecodeCoefs_SubBlockLoop_PitchShift_Up:
-	LDR	r8, [lr, -ip, lsl #0x02]    @ 1-1/r -> r8 [.14fxp -> .31fxp]
+.LDecodeCoefs_PitchShift_Up:
+	LDR	r5, [lr, -ip, lsl #0x02]    @ 1-1/r -> r5 [.14fxp -> .31fxp]
 	MUL	ip, r1, r0                  @ SrcPos = Rate * BlockSize [.14fxp]
 	ADD	r3, r3, r0, lsl #0x02       @ Dst = Buf + BlockSize   -> r3
 	MOV	lr, ip, lsr #0x0E           @ Src = Buf + (int)SrcPos -> r2
-	RSB	r8, r8, #0x01<<14
-	MOV	r8, r8, lsl #0x1F-14
+	RSB	r5, r5, #0x01<<14
+	MOV	r5, r5, lsl #0x1F-14
 	LDR	r0, [r2, lr, lsl #0x02]!    @ Coef -> r0
 	ADD	lr, r1, ip, lsl #0x10+16-14 @ Rate [.14fxp] | SubPos<<16 [.16fxp]
 1:	SUBS	lr, lr, lr, lsl #0x10+16-14 @ SubPos += Rate?
 	STR	r0, [r3, #-0x04]!
-	SMULLCS	r0, r1, r8, r0              @ Not wrapped: Scale/cancel
+	SMULLCS	r0, r1, r5, r0              @ Not wrapped: Scale/cancel
 	LDRCC	r0, [r2, #-0x04]!           @ Wrapped: Load next coefficients
 	MOVCS	r0, r0, lsr #0x1F
 	ORRCS	r0, r0, r1, lsl #0x01
 	CMP	r3, sl                      @ Hit the start?
 	BHI	1b
-2:	@B	.LDecodeCoefs_SubBlockLoop_PitchShiftComplete
+2:	@B	.LDecodeCoefs_PitchShiftComplete
 
-.LDecodeCoefs_SubBlockLoop_PitchShiftComplete:
+.LDecodeCoefs_PitchShiftComplete:
 
 /**************************************/
 .endif
 /**************************************/
 
+@ r0:
+@ r1:
+@ r2:
+@ r3:
+@ r4:  SubBlockSize
+@ r5:
+@ r6: &NextData | NybbleCounter<<29
+@ r7:  StreamData
+@ r8:  DecimationPattern
+@ r9:  QScaleBase | WindowCtrl<<16
+@ sl: &CoefDst
+@ fp:  BlockSize
+@ ip:
+@ lr:
+@ sp+00h: &OutBuf | Chan<<31 | IsStereo
+
 .LDecodeCoefs_SubBlockLoop_IMDCT:
-	MOV	r0, sl @ Undo DCT-IV
-	ADD	r1, sl, #0x04*ULC_MAX_BLOCK_SIZE @ <- In TempBuffer
-	MOV	r2, r9, lsr #0x10
+	MOV	r0, sl                @ Undo DCT-IV
+	ADD	r1, sl, #0x04*ULC_MAX_BLOCK_SIZE @ TempBuffer(=TransformBuffer+MAX_BLOCK_SIZE)
+	MOV	r2, r4, lsr #0x10
 	BL	Fourier_DCT4
-0:	STMFD	sp!, {r6-r7}
-	ADD	r5, r5, r9, lsr #0x10+1-2        @ Lap   = LapBuffer+SubBlockSize/2 -> r5
-	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo (in TempBuffer) -> ip
-	ADD	lr, ip, r9, lsr #0x10-2          @ OutHi = OutLo+SubBlockSize -> lr
-	ADD	sl, sl, r9, lsr #0x10+1-2        @ Skip the next-block aliased samples (SrcBuf += SubBlockSize/2)
-	SUBS	r8, r7, r9, lsr #0x10            @ Have any non-overlap samples? (-nNonOverlap = OverlapSize-SubBlockSize -> r8)
-	BCS	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap
+
+@ r0:
+@ r1:
+@ r2:
+@ r3:
+@ r4:  SubBlockSize
+@ r5: &OutBuf
+@ r6: [Scratch]
+@ r7: [Scratch]
+@ r8: &LapEnd
+@ r9: [Scratch/&CosSinTable]
+@ sl: &Src
+@ fp:  BlockSize
+@ ip:
+@ lr:
+
+0:	LDR	r5, [sp, #0x00]       @ OutBuf -> r5
+	STMFD	sp!, {r6-r9}
+	ADD	r6, r5, r4, lsr #0x10 @ Advance to next subblock in OutBuf
+	STR	r6, [sp, #0x10]
+	MOV	r6, r4, lsr #0x10     @ OverlapSize = SubBlockSize -> r6
+	BIC	ip, r4, r6, lsl #0x10 @ LastSubBlockSize -> ip
+	TST	r8, #0x08             @ Transient subblock?
+	MOVNE	lr, r9, lsr #0x10     @  Y: OverlapSize >>= (WindowCtrl&7)
+	ANDNE	lr, lr, #0x07
+	MOVNE	r6, r6, lsr lr
+	LDR	r9, =Fourier_CosSin - 0x02*16
+	CMP	r6, ip                @ OverlapSize > LastSubBlockSize?
+	MOVHI	r6, ip                @  Y: OverlapSize = LastSubBlockSize
+	MOV	r4, r4, lsr #0x10     @ LastSubBlockSize = SubBlockSize -> r4
+	ADD	r8, sl, #0x04*ULC_MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE) -> r8
+.if ULC_STEREO_SUPPORT
+	TST	r5, #0x80000000                    @ Second channel?
+	BIC	r5, r5, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
+	ADDNE	r5, r5, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel data
+	ADDNE	r8, r8, #0x04*ULC_MAX_BLOCK_SIZE/2
+.endif
+	ADD	r8, r8, r4, lsl #0x02-1          @ Lap   = LapBuffer+SubBlockSize/2 -> r8
+	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo(=TempBuffer) -> ip
+	ADD	lr, ip, r4, lsl #0x02            @ OutHi = OutLo+SubBlockSize -> lr
+	ADD	sl, sl, r4, lsl #0x02-1          @ Skip the next-block aliased samples (Src += SubBlockSize/2)
+0:	ADD	r9, r9, r6, lsl #0x01 @ Index the Cos/Sin table by OverlapSize
+	RSBS	r6, r6, r4            @ Have any non-overlap samples? (nNonOverlap = SubBlockSize-OverlapSize -> r6)
+	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap
 
 @ r0: [Scratch]
 @ r1: [Scratch]
 @ r2: [Scratch]
 @ r3: [Scratch]
-@ r4: &OutBuf
-@ r5: &Lap
-@ r6:  DecimationPattern
-@ r7:  OverlapSize
-@ r8:  -nNonOverlapRem
-@ r9:  OverlapScale | SubBlockSize<<16
+@ r4:  SubBlockSize
+@ r5: &OutBuf
+@ r6: [Scratch/nNonOverlapRem]
+@ r7: [Scratch]
+@ r8: &LapSrc
+@ r9: [Scratch/&CosSinTable]
 @ sl: &Src
 @ fp:  BlockSize
 @ ip: &OutLo
 @ lr: &OutHi
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_NoOverlap:
-0:	LDMDB	r5!, {r0-r3}      @ a = *--Lap
+0:	LDMDB	r8!, {r0-r3}      @ a = *--Lap
 	STR	r0, [ip, #0x0C]   @ *OutLo++ = a
 	STR	r1, [ip, #0x08]
 	STR	r2, [ip, #0x04]
@@ -544,31 +440,14 @@ ulc_PitchShiftKey: .word 0
 	STR	r1, [lr, #-0x04]!
 	STR	r2, [lr, #-0x04]!
 	STR	r3, [lr, #-0x04]!
-	ADDS	r8, r8, #0x08
-	BCC	0b
+	SUBS	r6, r6, #0x08
+	BNE	0b
 1:	CMP	ip, lr @ End? (OutLo == OutHi)
 	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_End
 
-@ r0: [Scratch]
-@ r1: [Scratch]
-@ r2: [Scratch]
-@ r3: [Scratch]
-@ r4: &OutBuf
-@ r5: &Lap
-@ r6: [Scratch]
-@ r7: [Scratch, input is OverlapSize]
-@ r8: &CosSin
-@ r9:  OverlapScale | SubBlockSize<<16
-@ sl: &Src
-@ fp:  BlockSize
-@ ip: &OutLo
-@ lr: &OutHi
-
 .LDecodeCoefs_SubBlockLoop_IMDCT_Overlap:
-	LDR	r8, =Fourier_CosSin - 0x02*16
-	ADD	r8, r8, r7, lsl #0x01
-0:	LDR	r0, [r8], #0x04       @ c | s<<16 -> r0
-	LDR	r2, [r5, #-0x04]!     @ a = *--Lap -> r2
+0:	LDR	r0, [r9], #0x04       @ c | s<<16 -> r0
+	LDR	r2, [r8, #-0x04]!     @ a = *--Lap -> r2
 	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
 	MOV	r1, r0, lsr #0x10     @ s -> r1
 	BIC	r0, r0, r1, lsl #0x10 @ c -> r0
@@ -597,156 +476,152 @@ ulc_PitchShiftKey: .word 0
 	BNE	0b
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_End:
-	MOV	r8, r9, lsr #0x10
-	SUB	fp, fp, r8, lsl #0x10-1 @ Store lapped samples from start of SrcBuf
-	SUB	r8, sl, r8, lsl #0x02   @ NOTE: Leave SrcBuf untouched, as it now points to the next subblock
-0:	LDMIA	r8!, {r0-r3,r6-r7,ip,lr}
-	STMIA	r5!, {r0-r3,r6-r7,ip,lr}
-	LDMIA	r8!, {r0-r3,r6-r7,ip,lr}
-	STMIA	r5!, {r0-r3,r6-r7,ip,lr}
-	ADDS	fp, fp, #0x10<<16
+	SUB	sl, sl, r4, lsl #0x02 @ Store lapped samples from start of SrcBuf to LapBuf
+	SUB	r4, r4, r4, lsl #0x10-1
+0:	LDMIA	sl!, {r0-r3,r6-r7,ip,lr}
+	STMIA	r8!, {r0-r3,r6-r7,ip,lr}
+	LDMIA	sl!, {r0-r3,r6-r7,ip,lr}
+	STMIA	r8!, {r0-r3,r6-r7,ip,lr}
+	ADDS	r4, r4, #0x10<<16
 	BCC	0b
-1:	SUB	r5, r5, r9, lsr #0x10+1-2 @ Rewind LapBuf, and then advance to the end
-	ADD	r5, r5, fp, lsl #0x02-1
+1:	SUB	r8, r8, r4, lsl #0x02-1 @ Rewind LapBuf, and then advance to the end
+	ADD	r8, r8, fp, lsl #0x02-1
+	SUB	sl, sl, r4, lsl #0x02-1 @ Rewind &Src
 
 @ r0: [Scratch]
 @ r1: [Scratch]
 @ r2: [Scratch]
 @ r3: [Scratch]
-@ r4: &OutBuf
-@ r5: &LapEnd
-@ r6: &SrcSmp
-@ r7:  ClipMask(=7Fh)
-@ r8: [Scratch]
-@ r9:  OverlapScale | SubBlockSize<<16
-@ sl: &SrcBuf (for next subblock)
+@ r4:  SubBlockSize
+@ r5: &OutBuf
+@ r6:  LapRem*2
+@ r7:  nLapOut
+@ r8: &LapEnd
+@ r9:  ClipMask(=7Fh)
+@ sl: &SrcSmp
 @ fp:  BlockSize
-@ ip:  LapExtra*2
-@ lr:  LapCopy | -LapCopyRem<<16
-@ sp+00h:  DecimationPattern
-@ sp+04h:  NextOverlapSize | OverlapSize<<16
-@ sp+08h: &State
-@ sp+0Ch: &OutBuf | Chan<<31 | IsStereo
-@ sp+10h: &NextData | NybbleCounter<<29
-@ sp+14h:  StreamData
-@ sp+18h:  QScaleBase | WindowCtrl
+@ ip:
+@ lr:
 
-.equ UNPACK_SHIFT, (ULC_COEF_PRECISION+1-8) @ Input is 1.XX due to the sign bit
+.equ UNPACK_SHIFT, (ULC_COEF_PRECISION+1-8) @ Input is 1.XX (+1 due to the sign bit), output is 8.0
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_LappingCycle:
-	SUB	r6, sl, r9, lsr #0x10-2 @ SrcSmp = TempBuf (IMDCT samples were stored here)
-	ADD	r6, r6, #0x04*ULC_MAX_BLOCK_SIZE
-	MOV	r7, #0x7F               @ ClipMask -> r7
-	SUB	ip, fp, r9, lsr #0x10   @ LapExtra*2 = BlockSize-SubBlockSize -> ip
-	CMP	ip, r9, lsr #0x10-1     @ LapExtra < SubBlockSize?
-	MOVCC	lr, ip, lsr #0x01       @  Y: LapCopy = LapExtra     -> lr
-	MOVCS	lr, r9, lsr #0x10       @  N: LapCopy = SubBlockSize -> lr
-1:	SUBS	lr, lr, lr, lsl #0x10   @ -LapCopyRem = -LapCopy?
+	ADD	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @ &SrcSmp(=TempBuffer) -> sl
+	MOV	r9, #0x7F         @ ClipMask -> r9
+	SUB	r6, fp, r4        @ LapRem*2 = BlockSize-SubBlockSize -> r6
+	CMP	r6, r4, lsl #0x01 @ LapRem < SubBlockSize?
+	MOVCC	r7, r6, lsr #0x01 @  Y: nLapOut = LapRem       -> r7
+	MOVCS	r7, r4            @  N: nLapOut = SubBlockSize -> r7
+1:	SUBS	r7, r7, r7, lsl #0x10   @ -nLapOutRem = -nLapOut?
 	BCS	2f
-10:	LDMDB	r5!, {r0-r3}            @ *Dst++ = *--LapEnd
+10:	LDMDB	r8!, {r0-r3}            @ *Dst++ = *--LapEnd
 	MOV	r0, r0, asr #UNPACK_SHIFT
 	MOV	r1, r1, asr #UNPACK_SHIFT
 	MOV	r2, r2, asr #UNPACK_SHIFT
 	MOV	r3, r3, asr #UNPACK_SHIFT
 	TEQ	r0, r0, lsl #0x18
-	EORMI	r0, r7, r0, asr #0x20
+	EORMI	r0, r9, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
-	EORMI	r1, r7, r1, asr #0x20
+	EORMI	r1, r9, r1, asr #0x20
 	TEQ	r2, r2, lsl #0x18
-	EORMI	r2, r7, r2, asr #0x20
+	EORMI	r2, r9, r2, asr #0x20
 	TEQ	r3, r3, lsl #0x18
-	EORMI	r3, r7, r3, asr #0x20
+	EORMI	r3, r9, r3, asr #0x20
 	AND	r3, r3, #0xFF
 	AND	r2, r2, #0xFF
 	AND	r1, r1, #0xFF
 	ORR	r3, r3, r2, lsl #0x08
 	ORR	r3, r3, r1, lsl #0x10
 	ORR	r0, r3, r0, lsl #0x18
-	STR	r0, [r4], #0x04
-	ADDS	lr, lr, #0x04<<16
+	STR	r0, [r5], #0x04
+	ADDS	r7, r7, #0x04<<16
 	BCC	10b
-2:	MOV	r0, r9, lsr #0x10     @ -SubBlockCopyRem = LapCopy-SubBlockSize?
-	ADD	lr, lr, lr, lsl #0x10
-	SUBS	lr, lr, r0, lsl #0x10
+2:	SUB	r0, r4, r7
+	SUBS	r7, r7, r0, lsl #0x10 @ -nSrcOut = nLapOut-SubBlockSize?
 	BCS	3f
-20:	LDMIA	r6!, {r0-r3}          @ *Dst++ = *SrcSmp++
+20:	LDMIA	sl!, {r0-r3}          @ *Dst++ = *SrcSmp++
 	MOV	r0, r0, asr #UNPACK_SHIFT
 	MOV	r1, r1, asr #UNPACK_SHIFT
 	MOV	r2, r2, asr #UNPACK_SHIFT
 	MOV	r3, r3, asr #UNPACK_SHIFT
 	TEQ	r0, r0, lsl #0x18
-	EORMI	r0, r7, r0, asr #0x20
+	EORMI	r0, r9, r0, asr #0x20
 	TEQ	r1, r1, lsl #0x18
-	EORMI	r1, r7, r1, asr #0x20
+	EORMI	r1, r9, r1, asr #0x20
 	TEQ	r2, r2, lsl #0x18
-	EORMI	r2, r7, r2, asr #0x20
+	EORMI	r2, r9, r2, asr #0x20
 	TEQ	r3, r3, lsl #0x18
-	EORMI	r3, r7, r3, asr #0x20
+	EORMI	r3, r9, r3, asr #0x20
 	AND	r0, r0, #0xFF
 	AND	r1, r1, #0xFF
 	AND	r2, r2, #0xFF
 	ORR	r0, r0, r1, lsl #0x08
 	ORR	r0, r0, r2, lsl #0x10
 	ORR	r0, r0, r3, lsl #0x18
-	STR	r0, [r4], #0x04
-	ADDS	lr, lr, #0x04<<16
+	STR	r0, [r5], #0x04
+	ADDS	r7, r7, #0x04<<16
 	BCC	20b
-3:	ADD	r8, r5, lr, lsl #0x02   @ LapBufDst = LapEnd -> r8
-	ADD	lr, lr, lr, lsl #0x10   @ -NewCopyRem = LapCopy-LapExtra?
-	SUBS	lr, lr, ip, lsl #0x10-1
-	ADD	ip, ip, lr, asr #0x10-1 @ [LapTailNew*2 = LapExtra*2 - NewCopy*2]
+3:	ADD	r9, r8, r7, lsl #0x02   @ LapBufDst = LapEnd -> r9
+	ORR	r7, r7, r7, lsl #0x10
+	SUBS	r7, r7, r6, lsl #0x10-1 @ -nLapShift = nLapOut-LapRem -> r7?
+	ADD	r6, r6, r7, asr #0x10-1 @ [nLapInsert*2 = LapRem*2 - nLapShift*2]
 	BCS	4f
-30:	LDMDB	r5!, {r0-r3}            @ *--LapBufDst = *--LapEnd
-	STMDB	r8!, {r0-r3}
-	ADDS	lr, lr, #0x04<<16
+30:	LDMDB	r8!, {r0-r3}            @ *--LapBufDst = *--LapEnd
+	STMDB	r9!, {r0-r3}
+	ADDS	r7, r7, #0x04<<16
 	BCC	30b
-4:	MOVS	ip, ip, lsr #0x01       @ LapTailNew?
+4:	MOVS	r6, r6, lsr #0x01       @ nLapInsert?
 	BEQ	5f
-40:	LDMIA	r6!, {r0-r3}            @ *--LapBufDst = *SrcSmp++
-	STR	r0, [r8, #-0x04]!
-	STR	r1, [r8, #-0x04]!
-	STR	r2, [r8, #-0x04]!
-	STR	r3, [r8, #-0x04]!
-	SUBS	ip, ip, #0x04
+40:	LDMIA	sl!, {r0-r3}            @ *--LapBufDst = *SrcSmp++
+	STR	r0, [r9, #-0x04]!
+	STR	r1, [r9, #-0x04]!
+	STR	r2, [r9, #-0x04]!
+	STR	r3, [r9, #-0x04]!
+	SUBS	r6, r6, #0x04
 	BNE	40b
-5:	SUB	r5, r5, r9, lsr #0x10+1-2 @ Rewind LapBuf
+5:
 
 .LDecodeCoefs_SubBlockLoop_Tail:
-	LDMFD	sp!, {r6-r7}
-	CMP	r6, #0x00 @ Not finished with the decimation pattern?
+	LDMFD	sp!, {r6-r9}
+	MOVS	r8, r8, lsr #0x04 @ Advance decimation pattern. Finished?
 	BNE	.LDecodeCoefs_SubBlockLoop
-0:	MOV	r0, r9, lsr #0x10 @ Save LastSubBlockSize
-	LDMFD	sp!, {r4-r7,r9}
 
-@ r0:  LastSubBlockSize
-@ r4: &State
-@ r5: &OutBuf | Chan<<31 | IsStereo
+@ r4:  LastSubBlockSize
+@ r5:
 @ r6: &NextData | NybbleCounter<<29
 @ r7:  StreamData
-@ r8: [Scratch]
+@ r8:  DecimationPattern
 @ r9:  QScaleBase | WindowCtrl<<16
-@ sl: &CoefDst
+@ sl:
 @ fp:  BlockSize
 
 .LDecodeCoefs_NextChan:
 .if ULC_STEREO_SUPPORT
-	ADDS	r5, r5, r5, lsl #0x1F @ Stereo, second channel?
+	LDR	r0, [sp], #0x04
+.else
+	ADD	sp, sp, #0x04 @ Pop OutBuf, not needed anymore
+.endif
+	LDR	r5, =ulc_State
+.if ULC_STEREO_SUPPORT
+	SUB	r0, r0, fp            @ Rewind OutBuf
+	ADDS	r0, r0, r0, lsl #0x1F @ Stereo, second channel?
+	STRMI	r0, [sp, #-0x04]!
 	BMI	.LChannels_Loop
 .endif
-0:	STRH	r0, [r4, #0x02] @ Save LastSubBlockSize
+0:	STRH	r4, [r5, #0x02] @ Save LastSubBlockSize
 
 /**************************************/
 
 .if ULC_STEREO_SUPPORT
 .LMidSideXfm:
-	TST	r5, #0x01 @ Check for IsStereo
+	TST	r0, #0x01 @ Check for IsStereo
 	BEQ	3f
-	BIC	r5, r5, #0x01
+	BIC	r4, r0, #0x01
 0:	MOV	r7, #0x80000000
 	MOV	r8, fp
 	MOV	r9, #0x01*ULC_MAX_BLOCK_SIZE*2
-1:	LDR	r0, [r5]
-	LDR	r1, [r5, r9]
+1:	LDR	r0, [r4]
+	LDR	r1, [r4, r9]
 0:	MOV	ip, r0, lsl #0x18
 	ADDS	r2, ip, r1, lsl #0x18
 	ADDVS	r2, r7, r2, asr #0x1F
@@ -758,8 +633,8 @@ ulc_PitchShiftKey: .word 0
 	ORR	r1, r3, r1, lsr #0x08
 	ADDS	r8, r8, #0x40000000
 	BCC	0b
-2:	STR	r1, [r5, r9]
-	STR	r0, [r5], #0x04
+2:	STR	r1, [r4, r9]
+	STR	r0, [r4], #0x04
 	SUBS	r8, r8, #0x04
 	BNE	1b
 3:
@@ -767,15 +642,15 @@ ulc_PitchShiftKey: .word 0
 
 /**************************************/
 
-@ r4: &State
+@ r5: &State
 @ r6: &NextData | NybbleCounter<<29
 
 .LSaveState_Exit:
-	LDR	r0, [r4, #0x0C]
+	LDR	r0, [r5, #0x0C]
 	MOVS	ip, r6, lsr #0x1D+1 @ Get bytes to advance by (C countains nybble rounding)
 	BIC	r6, r6, #0xE0000000 @ Clear nybble counter
 	ADC	r6, r6, ip
-	STR	r6, [r4, #0x0C]
+	STR	r6, [r5, #0x0C]
 	RSB	r0, r0, r6 @ Return bytes read for this block
 
 .LNoBufProc:
@@ -811,29 +686,33 @@ ulc_PitchShiftKey: .word 0
 
 /**************************************/
 
-@ r5: &OutBuf | IsStereo
+@ r3: &OutBuf | IsStereo
 @ fp:  BlockSize
 
 .LOutputPaused:
 	STR	r1, [r4, #0x04] @ Store updated WrBufIdx
-	AND	r6, r5, #0x01   @ IsStereo -> r6
-	BIC	r5, r5, #0x01
+.if ULC_STEREO_SUPPORT
+	AND	r6, r3, #0x01   @ IsStereo -> r6
+	BIC	r3, r3, #0x01
+.endif
 	MOV	r0, #0x00
 	MOV	r1, r0
 	MOV	r2, r0
-	MOV	r3, r0
 	MOV	r4, r0
+	MOV	r5, r0
 	MOV	r7, r0
 	MOV	r8, r0
 	MOV	r9, r0
 1:	SUB	fp, fp, fp, lsl #0x10
-10:	STMIA	r5!, {r0-r4,r7-r9} @ Clear 32 samples at once
+10:	STMIA	r3!, {r0-r2,r4-r5,r7-r9} @ Clear 32 samples at once
 	ADDS	fp, fp, #0x20<<16
 	BCC	10b
-2:	SUB	r5, r5, fp         @ Clear right buffer on stereo
-	ADD	r5, r5, #0x01*ULC_MAX_BLOCK_SIZE*2
+.if ULC_STEREO_SUPPORT
+2:	SUB	r3, r3, fp         @ Clear right buffer on stereo
+	ADD	r3, r3, #0x01*ULC_MAX_BLOCK_SIZE*2
 	MOVS	r6, r6, lsr #0x01
 	BCS	1b
+.endif
 3:	@MOV	r0, #0x00 @ No bytes were read
 	B	.LExit
 
