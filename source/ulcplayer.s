@@ -1001,8 +1001,7 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-.if 1
-	.word 16 @ Number of tracks
+	.word 18 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
 	.word  30f,  31f
@@ -1019,24 +1018,28 @@ SoundFiles:
 	.word 140f, 141f
 	.word 150f, 151f
 	.word 160f, 161f
+	.word 170f, 171f
+	.word 180f, 181f
 
 	.LSoundFiles_OriginSongName:
-	 11: .asciz "Rayvolt - And We Run"                                @ Q=55
-	 21: .asciz "Vertex - Run It Up"                                  @ Q=53
-	 31: .asciz "Vertex - Get Down"                                   @ Q=55
-	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"            @ Q=55
-	 51: .asciz "Vertex - Collective Paranoia"                        @ Q=55
-	 61: .asciz "Sefa & Mr. Ivex - LSD Problem"                       @ Q=55
-	 71: .asciz "Sefa - Schopenhauer"                                 @ Q=55
-	 81: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"            @ Q=55
-	 91: .asciz "Juju Rush - Catching Fire"                           @ Q=55
-	101: .asciz "Vertex - Let It Roll"                                @ Q=54
-	111: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)" @ Q=55
-	121: .asciz "Toto - Africa (Rayvolt Remix)"                       @ Q=55
-	131: .asciz "Rayvolt - Wellerman"                                 @ Q=55
-	141: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"    @ Q=55
-	151: .asciz "Re-Style & Korsakoff - Leap of Faith"                @ Q=55
-	161: .asciz "Death Punch - Nowhere Warm"                          @ Q=55
+	 11: .asciz "Rayvolt - And We Run"                                @ Q=50
+	 21: .asciz "Vertex - Run It Up"                                  @ Q=50
+	 31: .asciz "Vertex - Get Down"                                   @ Q=50
+	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"            @ Q=50
+	 51: .asciz "Vertex - Collective Paranoia"                        @ Q=50
+	 61: .asciz "Sefa & Mr. Ivex - LSD Problem"                       @ Q=50
+	 71: .asciz "Re-Style & Vertex - Shadow World"                    @ Q=50
+	 81: .asciz "Sefa - Schopenhauer"                                 @ Q=50
+	 91: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"            @ Q=50
+	101: .asciz "Juju Rush - Catching Fire"                           @ Q=50
+	111: .asciz "Vertex - Let It Roll"                                @ Q=50
+	121: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)" @ Q=50
+	131: .asciz "Toto - Africa (Rayvolt Remix)"                       @ Q=50
+	141: .asciz "Rayvolt - Wellerman"                                 @ Q=50
+	151: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"    @ Q=50
+	161: .asciz "Re-Style & Korsakoff - Leap of Faith"                @ Q=50
+	171: .asciz "Death Punch - Nowhere Warm"                          @ Q=50
+	181: .asciz "Dr. Peacock & Sefa - Incoming"                       @ Q=50
 
 	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
 	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Vertex - Run It Up.ulc"
@@ -1044,33 +1047,18 @@ SoundFiles:
 	.balign 4;  40: .incbin "source/music/FrenchcoreMix/Damian Ray - In My Brain (Rayvolt Remix).ulc"
 	.balign 4;  50: .incbin "source/music/FrenchcoreMix/Vertex - Collective Paranoia.ulc"
 	.balign 4;  60: .incbin "source/music/FrenchcoreMix/Sefa & Mr. Ivex - LSD Problem.ulc"
-	.balign 4;  70: .incbin "source/music/FrenchcoreMix/Sefa - Schopenhauer.ulc"
-	.balign 4;  80: .incbin "source/music/FrenchcoreMix/Dr. Peacock - Vive La Volta (Sefa Remix).ulc"
-	.balign 4;  90: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
-	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
-	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Re-Style - Towards the Sun (Vertex & Rayvolt Remix).ulc"
-	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
-	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
-	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
-	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
-	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
-.elseif 0
-	.word 1
-	.word 10f, 11f
-
-	.LSoundFiles_OriginSongName:
-	11: .asciz "Q-Dance: Defqon.1 Weekend Festival 2019 - Sefa"
-
-	.balign 4; 10: .incbin "source/music/Sefa2019/Defqon.1 Weekend Festival 2019 - Sefa.ulc" @ Q=71.43 (105.4kbps)
-.elseif 0
-	.word 1
-	.word 10f, 11f
-
-	.LSoundFiles_OriginSongName:
-	11: .asciz "Rayvolt - Start The Revolt: Live Yearmix 2020"
-
-	.balign 4; 10: .incbin "source/music/Rayvolt2020/Rayvolt - Start The Revolt Live Yearmix 2020.ulc" @ Q=53 (63.2kbps)
-.endif
+	.balign 4;  70: .incbin "source/music/FrenchcoreMix/Re-Style & Vertex - Shadow World.ulc"
+	.balign 4;  80: .incbin "source/music/FrenchcoreMix/Sefa - Schopenhauer.ulc"
+	.balign 4;  90: .incbin "source/music/FrenchcoreMix/Dr. Peacock - Vive La Volta (Sefa Remix).ulc"
+	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
+	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
+	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Re-Style - Towards the Sun (Vertex & Rayvolt Remix).ulc"
+	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
+	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
+	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
+	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
+	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
+	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
 
 .size SoundFiles, .-SoundFiles
 
