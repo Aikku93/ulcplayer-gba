@@ -170,8 +170,8 @@ main:
 	STR	r2, [r0, #0x18]   @ BG2HOFS,BG2VOFS
 	STRH	r3, [r0, #0x0C]
 .endif
-	LDR	r1, =0x10102541
-	STR	r1, [r0, #0x50]   @ BG0 over BG0,BG2,BD (additive blend, OBJ is added via AlphaBlend flag)
+	LDR	r1, =0x10102741
+	STR	r1, [r0, #0x50]   @ BG0 over BG0,BG1,BG2,BD (additive blend, OBJ is added via AlphaBlend flag)
 	LDR	r1, =_IRQTable
 	LDR	r0, =VBlankIRQ
 	STR	r0, [r1, #0x04*0] @ Set VBlank interrupt
@@ -671,7 +671,7 @@ VBlankIRQ:
 	CMP	sl, #0x00         @ On no file, just set the maximum block size
 	MOVEQ	sl, #ULC_MAX_BLOCK_SIZE
 	STR	sl, [sp, #-0x04]! @ BlockSize needs to be saved to wrap the buffer around
-0:	ADR	r0, .LVBlankIRQ_GraphDataL
+0:	ADR	r0, .LVBlankIRQ_GraphDataCur
 	LDR	r3, =ulc_OutputBuffer
 	LDR	ip, =GRAPH_SMPSTRIDE_RCP
 	MOV	r1, #(-GRAPH_W)<<24
@@ -688,51 +688,44 @@ VBlankIRQ:
 	ADDEQ	r1, r1, #0x01*ULC_MAX_BLOCK_SIZE*2 >> 8 @ Distance to right channel
 .endif
 	MUL	r4, ip, r4              @ Step = RateHz * SmpStrideReciprocal [.27fxp]
-	ADR	r6, .LVBlankIRQ_DrawGraphsLUT_L
-	ADD	r7, r6, #.LVBlankIRQ_DrawGraphsLUT_R - .LVBlankIRQ_DrawGraphsLUT_L
+	LDR	r6, =BGDesign_GraphLUT
 	LDR	r8, =0x06010000 + 0x20*GRAPH_TILEOFS
+	ADD	r7, r6, #0x0600
 	MOV	r4, r4, lsr #(27-12)    @ Step -> .12fxp, PosMu=0 to HI
 1:	ADD	r4, r4, r4, lsl #0x10   @ [PosMu += Step]
 10:	LDRB	sl, [r2, r1, lsl #0x08] @ Abs[xR] -> sl
-	LDRB	ip, [r0, #GRAPH_W]      @ Combine with old (nicer effect)
-	MOVS	sl, sl, lsl #0x18
-	EORMI	sl, sl, #0xFF<<24
-	RSB	sl, ip, sl, lsr #0x17
-	ADD	sl, ip, sl, asr #0x02
-	STRB	sl, [r0, #GRAPH_W]
-10:	LDRB	fp, [r2], r4, lsr #0x1C @ Abs[xL] -> fp, update position
-	LDRB	ip, [r0]                @ Combine with old
-	MOVS	fp, fp, lsl #0x18
-	EORMI	fp, fp, #0xFF<<24
-	RSB	fp, ip, fp, lsr #0x17
-	ADD	fp, ip, fp, asr #0x02
-	STRB	fp, [r0], #0x01
-2:	BIC	r4, r4, #0x0F<<28       @ Clear integer part
+	LDRB	fp, [r2], r4, lsr #0x1C @ Abs[xL] -> fp, update position
+	BIC	r4, r4, #0x0F<<28       @ Clear integer part os Pos
 	CMP	r2, r3                  @ Wrap (happens rarely, so use a BL instead of inlining conditionals)
 	BLCS	.LVBlankIRQ_DrawGraph_WrapBuffer
-20:	RSB	sl, sl, sl, lsl #0x02   @ Normalization rescaling (3/16)
+	TST	sl, #0x80               @ [Signed -> Unsigned]
+	EORNE	sl, sl, #0xFF
+	TST	fp, #0x80
+	EORNE	fp, fp, #0xFF
+	ADD	sl, sl, fp              @ [xR+xL -> .9fxp]
+	LDRB	ip, [r0]
+	LDRB	fp, [r0, #GRAPH_W]
+	RSB	sl, ip, sl, lsr #0x01   @ Combine with old (nicer effect) -> sl (Red)
+	ADD	sl, ip, sl, asr #0x02
+	STRB	sl, [r0], #0x01
+	RSB	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
+	ADD	fp, fp, ip, asr #0x02
+	STRB	fp, [r0, #GRAPH_W-1]
+20:	RSB	sl, sl, sl, lsl #0x02   @ Normalization rescaling (Red = 3/8, Blue=3/4)
 	RSB	fp, fp, fp, lsl #0x02
-	MOV	sl, sl, lsr #0x04
-	MOV	fp, fp, lsr #0x04
+	MOV	sl, sl, lsr #0x03
+	MOV	fp, fp, lsr #0x02
 	CMP	sl, #GRAPH_H/2-1 + 16   @ The LUT includes 16 'extra' levels to clip without fading
 	MOVHI	sl, #GRAPH_H/2-1 + 16
 	CMP	fp, #GRAPH_H/2-1 + 16
 	MOVHI	fp, #GRAPH_H/2-1 + 16
-21:	LDR	ip, [r6, sl, lsl #0x02] @ Get 4 pixels
-	LDR	lr, [r7, fp, lsl #0x02]
-	SUBS	sl, sl, #0x04
-	MOVCC	sl, #0x00
-	SUBS	fp, fp, #0x04
-	MOVCC	fp, #0x00
-	ADD	r9, ip, lr, lsl #0x04   @ Combine Red + Blue*16
-	LDR	ip, [r6, sl, lsl #0x02] @ Get next 4 pixels
-	LDR	lr, [r7, fp, lsl #0x02]
-	SUBS	sl, sl, #0x04
-	MOVCC	sl, #0x00
-	SUBS	fp, fp, #0x04
-	MOVCC	fp, #0x00
-	ADD	ip, ip, lr, lsl #0x04   @ Combine Red + Blue*16
-	STMIA	r8, {r9,ip}             @ Store tile row
+	ADD	fp, r6, fp, lsl #0x05
+	ADD	sl, r7, sl, lsl #0x05
+21:	LDMIA	sl!, {r5,r9}          @ Get 8 pixels (red)
+	LDMIA	fp!, {ip,lr}          @ Get 8 pixels (blue)
+	ADD	r5, ip, r5, lsl #0x04 @ Combine Blue + Red*16
+	ADD	r9, lr, r9, lsl #0x04
+	STMIA	r8, {r5,r9}             @ Store tile row
 	ADD	r8, r8, #0x40           @ Next tile across
 	ADDS	r4, r4, #0x01<<(32-(GRAPH_H_LOG2-1 - 3)) @ Half the graph is reflected, and we just did 8 pixels
 	BCC	21b
@@ -753,24 +746,8 @@ VBlankIRQ:
 	SUB	r2, r2, ip, lsl #0x01 @ Rewind to start of buffer
 	BX	lr
 
-.LVBlankIRQ_DrawGraphsLUT_L:
-	.word 0x00000000,0x00000001,0x00000102,0x00010203,0x01020304,0x02030405,0x03040506,0x04050607
-	.word 0x05060708,0x06070809,0x0708090A,0x08090A0B,0x090A0B0C,0x0A0B0C0D,0x0B0C0D0E,0x0C0D0E0F
-	.word 0x0D0E0F0F,0x0E0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F
-	.word 0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F
-	.word 0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F
-	.word 0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F,0x0F0F0F0F
-
-.LVBlankIRQ_DrawGraphsLUT_R:
-	.word 0x00000000,0x00000001,0x00000102,0x00010203,0x01020303,0x02030304,0x03030405,0x03040506 @ Floor[x * 13/15 + 0.5]
-	.word 0x04050607,0x05060708,0x06070809,0x0708090A,0x08090A0A,0x090A0A0B,0x0A0A0B0C,0x0A0B0C0D
-	.word 0x0B0C0D0D,0x0C0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D
-	.word 0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D
-	.word 0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D
-	.word 0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D,0x0D0D0D0D
-
-.LVBlankIRQ_GraphDataL: .space 0x01*GRAPH_W
-.LVBlankIRQ_GraphDataR: .space 0x01*GRAPH_W
+.LVBlankIRQ_GraphDataCur: .space 0x01*GRAPH_W
+.LVBlankIRQ_GraphDataAvg: .space 0x01*GRAPH_W
 
 @ r0:  Data (SecLo | SecHi<<5 | MinLo<<10 | MinHi<<15 | Hour<<20) (DRAW bit in bit0 of each part, data in bit1..4)
 @ r1: &TileData
@@ -912,6 +889,8 @@ VBlankIRQ:
 	.word 0x00000000,0x0000000F,0x000000F0,0x000000FF,0x00000F00,0x00000F0F,0x00000FF0,0x00000FFF
 	.word 0x0000F000,0x0000F00F,0x0000F0F0,0x0000F0FF,0x0000FF00,0x0000FF0F,0x0000FFF0,0x0000FFFF
 
+.pool
+
 /**************************************/
 .size VBlankIRQ, .-VBlankIRQ
 /**************************************/
@@ -964,6 +943,13 @@ BgDesignSprites_Pal:
 	.incbin "source/res/BgDesignSprites.pal"
 .size   BgDesignSprites_Pal, .-BgDesignSprites_Pal
 .global BgDesignSprites_Pal
+
+/**************************************/
+
+BGDesign_GraphLUT:
+	.incbin "source/res/BgDesignWaveformLUT.bin"
+.size   BGDesign_GraphLUT, .-BGDesign_GraphLUT
+.global BGDesign_GraphLUT
 
 /**************************************/
 
