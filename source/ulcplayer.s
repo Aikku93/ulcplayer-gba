@@ -14,8 +14,8 @@
 .equ GRAPH_TILEOFS, 42
 .equ GRAPH_SMPSTRIDE_RCP, 9363 @ Floor[2^27 / (VBlankRate * GRAPH_W)]
 /**************************************/
-.equ BACKDROP_ENABLE, 1
-.equ BACKDROP_PAL,    6
+.equ BACKDROP_ENABLE,  1
+.equ BACKDROP_PALOFS, 96
 /**************************************/
 .equ SONGDISPLAY_WIDTH,  224 @ Pixels
 .equ SONGDISPLAY_HEIGHT,  10 @ Pixels
@@ -64,7 +64,7 @@
 .equ GLYPHS_CHARMAP,   0
 .equ GLYPHS_TILEMAP,  30
 .equ GLYPHS_TILEOFS, (98 + 0x0000) @ Set palette here (design uses 98 tiles)
-.equ BACKDROP_CHARMAP, 0
+.equ BACKDROP_CHARMAP, 1
 .equ BACKDROP_TILEMAP, 29
 /**************************************/
 .equ SONGDISPLAY_TILEOFS,          GLYPHS_TILEOFS
@@ -79,7 +79,6 @@
 .equ TIMEDISPLAY_END_TILEADR,      (0x06000000 + 0x20*(TIMEDISPLAY_END_TILEOFS & 0x03FF))
 .equ TIMEDISPLAY_END_WIDTH_TILES,  ((TIMEDISPLAY_END_X + TIMEDISPLAY_WIDTH  + 7) / 8 - TIMEDISPLAY_END_X/8)
 .equ TIMEDISPLAY_END_HEIGHT_TILES, ((TIMEDISPLAY_END_Y + TIMEDISPLAY_HEIGHT + 7) / 8 - TIMEDISPLAY_END_Y/8)
-.equ BACKDROP_TILEOFS,             (TIMEDISPLAY_END_TILEOFS + TIMEDISPLAY_END_WIDTH_TILES*TIMEDISPLAY_END_HEIGHT_TILES)
 /**************************************/
 .text
 .balign 2
@@ -101,13 +100,13 @@ main:
 	BL	UnLZSS
 0:	LDR	r0, =BgDesign_Pal
 	LDR	r1, =0x05000000
-	LDR	r2, =(0x02 * (6 + BACKDROP_ENABLE)*16 / 0x04)
+	LDR	r2, =(0x02 * 6*16 / 0x04)
 	SWI	0x0C
 0:	LDR	r0, =0x06010000
 	LDR	r1, =BgDesignSprites_Gfx
 	BL	UnLZSS
 .if BACKDROP_ENABLE
-	LDR	r0, =0x06000000 + BACKDROP_TILEOFS*0x20
+	LDR	r0, =0x06000000 + BACKDROP_CHARMAP*0x4000
 	LDR	r1,=Backdrop_Gfx
 	BL	UnLZSS
 	LDR	r0, =.Lmain_ZeroWord
@@ -115,15 +114,16 @@ main:
 	LDR	r2, =(0x0800 / 0x04) | 1<<24
 	SWI	0x0C
 	LDR	r0, =0x06000000 + BACKDROP_TILEMAP*0x0800
-	MOV	r1, #0x08
-	LDR	r2, =(BACKDROP_TILEOFS | BACKDROP_PAL<<12) | ((BACKDROP_TILEOFS+1) | BACKDROP_PAL<<12)<<16
-	LDR	r3, =0x00020002
+	MOV	r1, #(64/8)
+	LDR	r2, =0x0100
+	LDR	r3, =0x0202
 1:	SUB	r1, #((240/8)/2) << 4
-10:	STMIA	r0!, {r2}
+10:	STRH	r2, [r0]
+	ADD	r0, #0x02
 	ADD	r2, r3
 	ADD	r1, #0x01 << 4
 	BCC	10b
-	ADD	r0, #0x04 @ Skip edge past screen border
+	ADD	r0, #0x02 @ Skip edge past screen border
 	SUB	r1, #0x01
 	BNE	1b
 .endif
@@ -165,10 +165,8 @@ main:
 	STR	r1, [r0, #0x10]   @ BG0HOFS,BG0VOFS
 	STR	r1, [r0, #0x14]   @ BG1HOFS,BG1VOFS
 .if BACKDROP_ENABLE
-	LDR	r2, =((-GRAPH_X)&0xFFFF) | ((-GRAPH_Y)&0xFFFF)<<16
-	LDR	r3, =(BACKDROP_TILEMAP<<8) @ BG2CNT
-	STR	r2, [r0, #0x18]   @ BG2HOFS,BG2VOFS
-	STRH	r3, [r0, #0x0C]
+	LDR	r2, =(BACKDROP_CHARMAP<<2) | (1<<7) | (BACKDROP_TILEMAP<<8) | (1<<14) @ 8bpp, 256x256
+	STRH	r2, [r0, #0x0C] @ BG2CNT
 .endif
 	LDR	r1, =0x10102741
 	STR	r1, [r0, #0x50]   @ BG0 over BG0,BG1,BG2,BD (additive blend, OBJ is added via AlphaBlend flag)
@@ -523,7 +521,7 @@ VBlankIRQ:
 	LDR	r4, =ulc_State
 0:	MOV	r0, #0x04000000
 	MOV	r1, #0x1300 + BACKDROP_ENABLE*0x400
-	ORR	r1, r1, #0x40          @ OBJ1D | BG0 | BG1 | BG2*BACKDROP_ENABLE | OBJ
+	ORR	r1, r1, #0x41          @ MODE1 | OBJ1D | BG0 | BG1 | BG2*BACKDROP_ENABLE | OBJ
 	STRH	r1, [r0], #0xF0
 0:	LDR	fp, [r4, #0x08]        @ SoundFile -> r5+fp?
 	LDRB	ip, [r4, #0x00]        @ RdBufIdx -> ip
@@ -690,8 +688,10 @@ VBlankIRQ:
 	MUL	r4, ip, r4              @ Step = RateHz * SmpStrideReciprocal [.27fxp]
 	LDR	r6, =BGDesign_GraphLUT
 	LDR	r8, =0x06010000 + 0x20*GRAPH_TILEOFS
-	ADD	r7, r6, #0x0600
 	MOV	r4, r4, lsr #(27-12)    @ Step -> .12fxp, PosMu=0 to HI
+.if BACKDROP_ENABLE
+	MOV	r7, #0x00               @ LPEnergy | HPEnergy<<16 -> r7
+.endif
 1:	ADD	r4, r4, r4, lsl #0x10   @ [PosMu += Step]
 10:	LDRB	sl, [r2, r1, lsl #0x08] @ Abs[xR] -> sl
 	LDRB	fp, [r2], r4, lsr #0x1C @ Abs[xL] -> fp, update position
@@ -708,9 +708,16 @@ VBlankIRQ:
 	RSB	sl, ip, sl, lsr #0x01   @ Combine with old (nicer effect) -> sl (Red)
 	ADD	sl, ip, sl, asr #0x02
 	STRB	sl, [r0], #0x01
-	RSB	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
-	ADD	fp, fp, ip, asr #0x02
+	RSBS	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
+.if BACKDROP_ENABLE
+	ADDHI	r7, r7, ip, lsl #0x10   @ Accumulate difference to "HP" energy
+	SUBCC	r7, r7, ip, lsl #0x10
+.endif
+	ADD	fp, fp, ip, asr #0x03
 	STRB	fp, [r0, #GRAPH_W-1]
+.if BACKDROP_ENABLE
+	ADD	r7, r7, fp              @ Accumulate to "LP" energy
+.endif
 20:	RSB	sl, sl, sl, lsl #0x02   @ Normalization rescaling (Red = 3/8, Blue=3/4)
 	RSB	fp, fp, fp, lsl #0x02
 	MOV	sl, sl, lsr #0x03
@@ -720,7 +727,8 @@ VBlankIRQ:
 	CMP	fp, #GRAPH_H/2-1 + 16
 	MOVHI	fp, #GRAPH_H/2-1 + 16
 	ADD	fp, r6, fp, lsl #0x05
-	ADD	sl, r7, sl, lsl #0x05
+	ADD	sl, r6, sl, lsl #0x05
+	ADD	sl, sl, #0x0600
 21:	LDMIA	sl!, {r5,r9}          @ Get 8 pixels (red)
 	LDMIA	fp!, {ip,lr}          @ Get 8 pixels (blue)
 	ADD	r5, ip, r5, lsl #0x04 @ Combine Blue + Red*16
@@ -734,6 +742,67 @@ VBlankIRQ:
 	ADDEQ	r8, r8, #(GRAPH_H/2)*8-8*8
 	ADDS	r1, r1, #0x01<<24                @ Next sample?
 	BCC	1b
+
+.if BACKDROP_ENABLE
+
+@ r7: LPEnergy | HPEnergy<<16
+.LVBlankIRQ_RescaleBackdrop:
+	MOV	r0, #0x01<<15
+	MOV	r1, r7, lsl #0x10      @ LPEnergy<<16 -> r1
+	SUB	r0, r0, r1, lsr #0x11  @ Scale = (1 - Energy/ARBITRAY_SCALE_FACTOR)^2
+	ADD	r0, r0, r1, lsr #0x13
+	MUL	ip, r0, r0
+	MOV	r0, ip, lsr #0x1E-8
+	MOV	r1, #GRAPH_W/2+GRAPH_X @ Adjust XOFS/YOFS based on scaling (TONC bg_rotscale_ex() formula)
+	MUL	r2, r0, r1
+	MOV	r1, #GRAPH_H/2+GRAPH_Y
+	MUL	r3, r0, r1
+	RSBS	r2, r2, #(GRAPH_W/2)<<8
+	ADDMI	r2, r2, #0x01<<8       @ <- Offset of 1.0 texels seems to help?
+	RSBS	r3, r3, #(GRAPH_H/2)<<8
+	ADDMI	r3, r3, #0x01<<8
+	MOV	r4, #0x04000000
+	STRH	r0, [r4, #0x20]        @ Store PA = PD = Scale
+	STRH	r0, [r4, #0x26]
+	ADD	r4, #0x28              @ Store XOFS,YOFS
+	STMIA	r4, {r2-r3}
+
+@ r7: HPEnergy<<16
+.LVBlankIRQ_BrightenBackdrop:
+	LDR	r0, .LVBlankIRQ_BackdropBrightness
+	RSBS	r7, r0, r7, lsr #0x10
+	ADDHI	r7, r0, r7, asr #0x03 @ Attack is faster than decay
+	ADDCC	r7, r0, r7, asr #0x05
+	STR	r7, .LVBlankIRQ_BackdropBrightness
+	MUL	ip, r7, r7
+	MOV	r0, #0x14 @ Brightness = 20/32 + Energy/ARBITRAY_SCALE_FACTOR -> r0 [.5fxp]
+	ADD	r0, r0, ip, lsr #0x13
+	CMP	r0, #0x20
+	MOVHI	r0, #0x20
+	LDR	r1, =0x03E07C1F
+	MOV	r2, #0x05000000
+	ADD	r2, r2, #0x02*BACKDROP_PALOFS
+	LDR	r3, =BgDesign_Pal + 0x02*BACKDROP_PALOFS
+	MOV	lr, #(256-BACKDROP_PALOFS) @ Assume palette runs until the end
+1:	LDMIA	r3!, {r4,r6}
+	AND	r5, r1, r4, ror #0x10 @ --g0--b1--r1
+	AND	r4, r1, r4            @ --g1--b0--r0
+	AND	r7, r1, r6, ror #0x10 @ --g2--b3--r3
+	AND	r6, r1, r6            @ --g3--b2--r2
+	MUL	r8, r4, r0
+	MUL	r9, r5, r0
+	MUL	sl, r6, r0
+	MUL	fp, r7, r0
+	AND	r4, r1, r8, lsr #0x05
+	AND	r5, r1, r9, lsr #0x05
+	AND	r6, r1, sl, lsr #0x05
+	AND	r7, r1, fp, lsr #0x05
+	ORR	r4, r4, r5, ror #0x10 @ b1g1r1b0g0r0
+	ORR	r6, r6, r7, ror #0x10 @ b3g3r3b2g2r2
+	STMIA	r2!, {r4,r6}
+	SUBS	lr, lr, #0x04
+	BNE	1b
+.endif
 
 .LVBlankIRQ_Exit:
 	LDMFD	sp!, {r3-fp,ip,lr} @ Pop BlockSize (into r3) from .LVBlankIRQ_DrawGraph. Saves having to "ADD sp, sp, #4"
@@ -889,7 +958,11 @@ VBlankIRQ:
 	.word 0x00000000,0x0000000F,0x000000F0,0x000000FF,0x00000F00,0x00000F0F,0x00000FF0,0x00000FFF
 	.word 0x0000F000,0x0000F00F,0x0000F0F0,0x0000F0FF,0x0000FF00,0x0000FF0F,0x0000FFF0,0x0000FFFF
 
-.pool
+.if BACKDROP_ENABLE
+
+.LVBlankIRQ_BackdropBrightness: .word 0
+
+.endif
 
 /**************************************/
 .size VBlankIRQ, .-VBlankIRQ
