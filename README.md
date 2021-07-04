@@ -35,8 +35,10 @@ The player supports both mono and stereo files and any block size up to 2048.
 
 ## Pre-built Demo (Last update: 2021/06/25)
 
+### **WARNING: Flashing lights.**
+
 Files:
- * [~59kbps VBR (Q=50 @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~59kbps VBR (Q=50 @ 32.768kHz (M/S stereo, 31.7MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Rayvolt - And We Run
