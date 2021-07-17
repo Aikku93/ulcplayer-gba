@@ -168,6 +168,12 @@ main:
 	LDR	r2, =(BACKDROP_CHARMAP<<2) | (1<<7) | (BACKDROP_TILEMAP<<8) | (1<<14) @ 8bpp, 256x256
 	STRH	r2, [r0, #0x0C] @ BG2CNT
 .endif
+	LDR	r1, =(GRAPH_X+GRAPH_W) | GRAPH_X<<8
+	LDR	r2, =(GRAPH_Y+GRAPH_H) | GRAPH_Y<<8
+	LDR	r3, =0x003B003F
+	STR	r1, [r0, #0x40]   @ Set a window to block backdrop from zooming outside of the frame
+	STR	r2, [r0, #0x44]
+	STR	r3, [r0, #0x48]
 	LDR	r1, =0x10102741
 	STR	r1, [r0, #0x50]   @ BG0 over BG0,BG1,BG2,BD (additive blend, OBJ is added via AlphaBlend flag)
 	LDR	r1, =_IRQTable
@@ -520,8 +526,8 @@ VBlankIRQ:
 0:	STMFD	sp!, {r4-fp,ip,lr}
 	LDR	r4, =ulc_State
 0:	MOV	r0, #0x04000000
-	MOV	r1, #0x1300 + BACKDROP_ENABLE*0x400
-	ORR	r1, r1, #0x41          @ MODE1 | OBJ1D | BG0 | BG1 | BG2*BACKDROP_ENABLE | OBJ
+	MOV	r1, #0x3300 + BACKDROP_ENABLE*0x400
+	ORR	r1, r1, #0x41          @ MODE1 | OBJ1D | BG0 | BG1 | BG2*BACKDROP_ENABLE | OBJ | WIN0
 	STRH	r1, [r0], #0xF0
 0:	LDR	fp, [r4, #0x08]        @ SoundFile -> r5+fp?
 	LDRB	ip, [r4, #0x00]        @ RdBufIdx -> ip
@@ -690,7 +696,7 @@ VBlankIRQ:
 	LDR	r8, =0x06010000 + 0x20*GRAPH_TILEOFS
 	MOV	r4, r4, lsr #(27-12)    @ Step -> .12fxp, PosMu=0 to HI
 .if BACKDROP_ENABLE
-	MOV	r7, #0x00               @ LPEnergy | HPEnergy<<16 -> r7
+	MOV	r7, #0x00               @ LPEnergy -> r7
 .endif
 1:	ADD	r4, r4, r4, lsl #0x10   @ [PosMu += Step]
 10:	LDRB	sl, [r2, r1, lsl #0x08] @ Abs[xR] -> sl
@@ -708,15 +714,11 @@ VBlankIRQ:
 	RSB	sl, ip, sl, lsr #0x01   @ Combine with old (nicer effect) -> sl (Red)
 	ADD	sl, ip, sl, asr #0x02
 	STRB	sl, [r0], #0x01
-	RSBS	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
-.if BACKDROP_ENABLE
-	ADDHI	r7, r7, ip, lsl #0x10   @ Accumulate difference to "HP" energy
-	SUBCC	r7, r7, ip, lsl #0x10
-.endif
+	RSB	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
 	ADD	fp, fp, ip, asr #0x03
 	STRB	fp, [r0, #GRAPH_W-1]
 .if BACKDROP_ENABLE
-	ADD	r7, r7, fp              @ Accumulate to "LP" energy
+	MLA	r7, fp, fp, r7          @ Accumulate to "LP" energy
 .endif
 20:	RSB	sl, sl, sl, lsl #0x02   @ Normalization rescaling (Red = 3/8, Blue=3/4)
 	RSB	fp, fp, fp, lsl #0x02
@@ -745,14 +747,11 @@ VBlankIRQ:
 
 .if BACKDROP_ENABLE
 
-@ r7: LPEnergy | HPEnergy<<16
+@ r7: LPEnergy
 .LVBlankIRQ_RescaleBackdrop:
-	MOV	r0, #0x01<<15
-	MOV	r1, r7, lsl #0x10      @ LPEnergy<<16 -> r1
-	SUB	r0, r0, r1, lsr #0x11  @ Scale = (1 - Energy/ARBITRAY_SCALE_FACTOR)^2
-	ADD	r0, r0, r1, lsr #0x13
-	MUL	ip, r0, r0
-	MOV	r0, ip, lsr #0x1E-8
+	MOV	r0, #0x0100
+	SUB	r0, r0, r7, lsr #0x0D  @ Scale = 1 - LPEnergy/ARBITRAY_SCALE_FACTOR -> r0
+	ADD	r0, r0, r7, lsr #0x0F
 	MOV	r1, #GRAPH_W/2+GRAPH_X @ Adjust XOFS/YOFS based on scaling (TONC bg_rotscale_ex() formula)
 	MUL	r2, r0, r1
 	MOV	r1, #GRAPH_H/2+GRAPH_Y
@@ -767,16 +766,15 @@ VBlankIRQ:
 	ADD	r4, #0x28              @ Store XOFS,YOFS
 	STMIA	r4, {r2-r3}
 
-@ r7: HPEnergy<<16
+@ r7: LPEnergy
 .LVBlankIRQ_BrightenBackdrop:
 	LDR	r0, .LVBlankIRQ_BackdropBrightness
-	RSBS	r7, r0, r7, lsr #0x10
-	ADDHI	r7, r0, r7, asr #0x03 @ Attack is faster than decay
-	ADDCC	r7, r0, r7, asr #0x05
+	SUBS	r7, r7, r0
+	ADDHI	r7, r0, r7, asr #0x02 @ Attack is faster than decay
+	ADDCC	r7, r0, r7, asr #0x04
 	STR	r7, .LVBlankIRQ_BackdropBrightness
-	MUL	ip, r7, r7
 	MOV	r0, #0x14 @ Brightness = 20/32 + Energy/ARBITRAY_SCALE_FACTOR -> r0 [.5fxp]
-	ADD	r0, r0, ip, lsr #0x13
+	ADD	r0, r0, r7, lsr #0x0E
 	CMP	r0, #0x20
 	MOVHI	r0, #0x20
 	LDR	r1, =0x03E07C1F
