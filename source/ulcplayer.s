@@ -87,10 +87,6 @@
 .thumb
 .thumb_func
 main:
-	LDR	r0, =0x04000204 @ Setup for better waitstates (not needed in emulation, but might be necessary on hardware?)
-	LDR	r1, =0x4017
-	STRH	r1, [r0]
-
 .Lmain_LoadDesign:
 0:	LDR	r0, =0x06000000 + DESIGN_TILEOFS*0x20
 	LDR	r1, =BgDesign_Gfx
@@ -701,7 +697,7 @@ VBlankIRQ:
 1:	ADD	r4, r4, r4, lsl #0x10   @ [PosMu += Step]
 10:	LDRB	sl, [r2, r1, lsl #0x08] @ Abs[xR] -> sl
 	LDRB	fp, [r2], r4, lsr #0x1C @ Abs[xL] -> fp, update position
-	BIC	r4, r4, #0x0F<<28       @ Clear integer part os Pos
+	BIC	r4, r4, #0x0F<<28       @ Clear integer part of Pos
 	CMP	r2, r3                  @ Wrap (happens rarely, so use a BL instead of inlining conditionals)
 	BLCS	.LVBlankIRQ_DrawGraph_WrapBuffer
 	TST	sl, #0x80               @ [Signed -> Unsigned]
@@ -749,32 +745,30 @@ VBlankIRQ:
 
 @ r7: LPEnergy
 .LVBlankIRQ_RescaleBackdrop:
-	MOV	r0, #0x0100
-	SUB	r0, r0, r7, lsr #0x0D  @ Scale = 1 - LPEnergy/ARBITRAY_SCALE_FACTOR -> r0
-	ADD	r0, r0, r7, lsr #0x0F
+	LDR	r0, .LVBlankIRQ_BackdropEnergy @ Smooth out LPEnergy before doing anything
+	SUBS	r7, r7, r0
+	ADDHI	r7, r0, r7, asr #0x01          @ Attack is faster than decay
+	ADDCC	r7, r0, r7, asr #0x03
+	STRNE	r7, .LVBlankIRQ_BackdropEnergy
+0:	MOV	r0, #0x0100
+	SUBS	r1, r7, #0x010000
+	SUBCS	r0, r0, r1, lsr #0x0E  @ Scale = 1 - Max[0,LPEnergy-ARBITRARY_OFFSET]/ARBITRAY_SCALE_FACTOR -> r0
 	MOV	r1, #GRAPH_W/2+GRAPH_X @ Adjust XOFS/YOFS based on scaling (TONC bg_rotscale_ex() formula)
 	MUL	r2, r0, r1
 	MOV	r1, #GRAPH_H/2+GRAPH_Y
 	MUL	r3, r0, r1
-	RSBS	r2, r2, #(GRAPH_W/2)<<8
-	ADDMI	r2, r2, #0x01<<8       @ <- Offset of 1.0 texels seems to help?
-	RSBS	r3, r3, #(GRAPH_H/2)<<8
-	ADDMI	r3, r3, #0x01<<8
+	RSB	r2, r2, #(GRAPH_W/2)<<8
+	RSB	r3, r3, #(GRAPH_H/2)<<8
 	MOV	r4, #0x04000000
 	STRH	r0, [r4, #0x20]        @ Store PA = PD = Scale
 	STRH	r0, [r4, #0x26]
-	ADD	r4, #0x28              @ Store XOFS,YOFS
+	ADD	r4, r4, #0x28          @ Store XOFS,YOFS
 	STMIA	r4, {r2-r3}
 
 @ r7: LPEnergy
 .LVBlankIRQ_BrightenBackdrop:
-	LDR	r0, .LVBlankIRQ_BackdropBrightness
-	SUBS	r7, r7, r0
-	ADDHI	r7, r0, r7, asr #0x02 @ Attack is faster than decay
-	ADDCC	r7, r0, r7, asr #0x04
-	STR	r7, .LVBlankIRQ_BackdropBrightness
 	MOV	r0, #0x14 @ Brightness = 20/32 + Energy/ARBITRAY_SCALE_FACTOR -> r0 [.5fxp]
-	ADD	r0, r0, r7, lsr #0x0E
+	ADD	r0, r0, r7, lsr #0x0D
 	CMP	r0, #0x20
 	MOVHI	r0, #0x20
 	LDR	r1, =0x03E07C1F
@@ -958,7 +952,7 @@ VBlankIRQ:
 
 .if BACKDROP_ENABLE
 
-.LVBlankIRQ_BackdropBrightness: .word 0
+.LVBlankIRQ_BackdropEnergy: .word 0
 
 .endif
 
@@ -1058,7 +1052,7 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-	.word 18 @ Number of tracks
+	.word 19 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
 	.word  30f,  31f
@@ -1077,26 +1071,28 @@ SoundFiles:
 	.word 160f, 161f
 	.word 170f, 171f
 	.word 180f, 181f
+	.word 190f, 191f
 
 	.LSoundFiles_OriginSongName:
-	 11: .asciz "Rayvolt - And We Run"                                @ Q=50
-	 21: .asciz "Vertex - Run It Up"                                  @ Q=50
-	 31: .asciz "Vertex - Get Down"                                   @ Q=50
-	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"            @ Q=50
-	 51: .asciz "Vertex - Collective Paranoia"                        @ Q=50
-	 61: .asciz "Sefa & Mr. Ivex - LSD Problem"                       @ Q=50
-	 71: .asciz "Re-Style & Vertex - Shadow World"                    @ Q=50
-	 81: .asciz "Sefa - Schopenhauer"                                 @ Q=50
-	 91: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"            @ Q=50
-	101: .asciz "Juju Rush - Catching Fire"                           @ Q=50
-	111: .asciz "Vertex - Let It Roll"                                @ Q=50
-	121: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)" @ Q=50
-	131: .asciz "Toto - Africa (Rayvolt Remix)"                       @ Q=50
-	141: .asciz "Rayvolt - Wellerman"                                 @ Q=50
-	151: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"    @ Q=50
-	161: .asciz "Re-Style & Korsakoff - Leap of Faith"                @ Q=50
-	171: .asciz "Death Punch - Nowhere Warm"                          @ Q=50
-	181: .asciz "Dr. Peacock & Sefa - Incoming"                       @ Q=50
+	 11: .asciz "Rayvolt - And We Run"
+	 21: .asciz "Vertex - Run It Up"
+	 31: .asciz "Vertex - Get Down"
+	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"
+	 51: .asciz "Vertex - Collective Paranoia"
+	 61: .asciz "Sefa & Mr. Ivex - LSD Problem"
+	 71: .asciz "Re-Style & Vertex - Shadow World"
+	 81: .asciz "Sefa - Schopenhauer"
+	 91: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"
+	101: .asciz "Juju Rush - Catching Fire"
+	111: .asciz "Vertex - Let It Roll"
+	121: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)"
+	131: .asciz "Toto - Africa (Rayvolt Remix)"
+	141: .asciz "Rayvolt - Wellerman"
+	151: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
+	161: .asciz "Re-Style & Korsakoff - Leap of Faith"
+	171: .asciz "Death Punch - Nowhere Warm"
+	181: .asciz "Dr. Peacock & Sefa - Incoming"
+	191: .asciz "Re-Style & Runeforce - A New Dawn"
 
 	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
 	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Vertex - Run It Up.ulc"
@@ -1116,6 +1112,7 @@ SoundFiles:
 	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
 	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
 	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
+	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
 
 .size SoundFiles, .-SoundFiles
 
