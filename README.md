@@ -27,18 +27,19 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Mr. Ivex](https://music.youtube.com/channel/UCsrWJSnK1ZryH-92x00a4uA)
   * [Rayvolt](https://music.youtube.com/channel/UCUCZojA3_kduHSK_-bmYSAA)
   * [Re-Style](https://music.youtube.com/channel/UCL9cYAVYKKXubDZ-fXS4v4w)
+  * [Runeforce](https://music.youtube.com/channel/UCkfDBzVQEOWKx2zX7Ul1Qcg)
   * [Sefa](https://djsefa.com/)
   * [Toto](https://music.youtube.com/channel/UCewH1MBbYlEZMWx3ZUNywyg)
   * [Vertex](https://music.youtube.com/channel/UCtRTO5SOpUJvfyZD43ZTxYQ)
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/07/17)
+## Pre-built Demo (Last update: 2021/08/21)
 
 ### **WARNING: Flashing lights.**
 
 Files:
- * [~59kbps VBR (Q=50 @ 32.768kHz (M/S stereo, 31.5MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~56kbps VBR (Q=47.25 @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Rayvolt - And We Run
@@ -59,3 +60,4 @@ Featuring:
  * Re-Style & Korsakoff - Leap of Faith
  * Death Punch - Nowhere Warm
  * Dr. Peacock & Sefa - Incoming
+ * Re-Style & Runeforce - A New Dawn
