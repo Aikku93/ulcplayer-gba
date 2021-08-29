@@ -958,7 +958,7 @@ BgDesign_Map:
 BgDesign_Pal:
 	.incbin "source/res/BgDesign.pal"
 .if BACKDROP_ENABLE
-	.incbin "source/music/ANewDawn/Backdrop.pal"
+	.incbin "source/music/FrenchcoreMix/Backdrop.pal"
 .endif
 .size   BgDesign_Pal, .-BgDesign_Pal
 .global BgDesign_Pal
@@ -972,7 +972,7 @@ BgDesignSprites_Gfx:
 
 .if BACKDROP_ENABLE
 
-Backdrop_Gfx: .incbin "source/music/ANewDawn/Backdrop.img.lz"
+Backdrop_Gfx: .incbin "source/music/FrenchcoreMix/Backdrop.img.lz"
 .size Backdrop_Gfx, .-Backdrop_Gfx
 
 .endif
@@ -1028,7 +1028,6 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-.if 1
 	.word 20 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
@@ -1093,13 +1092,6 @@ SoundFiles:
 	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
 	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
 	.balign 4; 200: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
-.else
-	.word 1 @ Number of tracks
-	.word  10f,  11f
-	.LSoundFiles_OriginSongName:
-	11: .asciz "Re-Style & Runeforce - A New Dawn"
-	.balign 4;  10: .incbin "source/music/ANewDawn/Re-Style & Runeforce - A New Dawn (128k).ulc"
-.endif
 
 .size SoundFiles, .-SoundFiles
 
