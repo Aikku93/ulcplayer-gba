@@ -14,30 +14,28 @@
 @ usage for the transform and playback buffers.
 .equ ULC_STEREO_SUPPORT, 1
 
-@ These options control IMDCT behaviour.
-@  -ULC_64BIT_MATH uses 64bit math to work around overflow
-@   in intermediate calculations. The downside is a large
-@   increase in computation for 64bit multiplies. However,
-@   this allows for more accurate calculations, as well as
-@   allowing rounding during high-precision multiplication.
-@   Note that this should not be necessary if the precision
-@   is 15bit or lower (see ULC_COEF_PRECISION), as there is
-@   no overflow at this level of precision.
-@  -ULC_COEF_PRECISION controls the bitdepth of the audio,
-@   excluding the sign bit (eg. 16bit audio would set this
-@   to 15). It is strongly recommended to set this to at
-@   least double the target bitdepth in order to minimize
-@   rounding error during IMDCT, up to a maximum of 28.
-@   This value must NOT be larger than 28. In theory, it's
-@   possible to set this to 29, but this requires special
-@   handling in ulc_BlockProcess() (the shift factor can
-@   become 0, which requires clearing the LSR flag). If set
-@   to anything larger, MDCT coefficients will overflow.
-@   NOTE: This refers to the internal precision, not the
-@   final audio output; this is always 8bit for GBA.
+@ This controls the bitdepth of the audio, excluding the
+@ sign bit (eg. 16bit coefficients would set this to 15).
+@ This should be set as high as possible, regardless of
+@ the output audio quality, as IMDCT requires a lot of
+@ recursive computation and the error propagates between
+@ each step. The final 8-point DCT stages are also not
+@ particularly accurate, but as long as this precision
+@ is kept high, the rounding error should be kept in the
+@ bits that will be discarded for output.
+@ I'm honestly not sure what the theoretical maximum is
+@ here. Each step of the DCT algorithm has an infinity
+@ norm of 2.0, but that assumes 'any' signal, which is
+@ not actually the case here, as we have normalized the
+@ signal in the encoding stages. Setting this value to
+@ 28 doesn't appears to cause internal overflow, but
+@ I can't 100% guarantee that this is the case.
+@ This value must NOT be larger than 28. In theory, it's
+@ possible to set this to 29, but this requires special
+@ handling in ulc_BlockProcess() (the shift factor can
+@ become 0, which requires clearing the LSR flag). If set
+@ to anything larger, MDCT coefficients will overflow.
+@ NOTE: This refers to the internal precision, not the
+@ final audio output; this is always 8bit for GBA.
 .equ ULC_64BIT_MATH,      1
 .equ ULC_COEF_PRECISION, 28
-
-@ This enables a crappy pitch-shift algorithm.
-@ Fairly useless and poor quality, but fun to play with.
-.equ ULC_ALLOW_PITCH_SHIFT, 1

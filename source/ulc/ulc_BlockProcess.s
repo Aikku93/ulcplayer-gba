@@ -269,84 +269,6 @@ ulc_BlockProcess:
 	SUB	sl, sl, r4, lsr #0x10-2 @ Rewind buffer
 
 /**************************************/
-.if ULC_ALLOW_PITCH_SHIFT
-/**************************************/
-
-@ No point in optimizing this too much, mostly a joke
-
-.LDecodeCoefs_PitchShift:
-	LDR	ip, ulc_PitchShiftKey
-	ADR	lr, .LDecodeCoefs_PitchShift_KeyScale + 0x04*12
-	LDR	r1, [lr, ip, lsl #0x02] @ Stp = 2^(-Key/12) [.14fxp] << 16 | Pos(=0)
-	MOV	r2, sl                  @ Src
-	MOV	r3, sl                  @ Dst
-0:	SUBS	r5, r1, #0x01<<14
-	BEQ	.LDecodeCoefs_PitchShiftComplete
-	MOV	r0, r4, lsr #0x10       @ SubBlockSize -> r0
-	BCC	.LDecodeCoefs_PitchShift_Up
-
-.LDecodeCoefs_PitchShift_Down:
-	MOV	r1, r5, lsl #0x10-14
-	ADD	r5, sl, r0, lsl #0x02
-1:	ADDS	r1, r1, r1, lsl #0x10
-	LDR	ip, [r2], #0x04
-	ADDCS	r2, r2, #0x04
-	CMP	r2, r5
-	STR	ip, [r3], #0x04
-	BCC	1b
-2:	MOV	ip, #0x00
-	MOV	lr, #0x00
-	SUB	r2, r5, r3
-	MOVS	r2, r2, lsr #0x01+2
-	STRCS	ip, [r3], #0x04
-	MOVS	r2, r2, lsr #0x01
-22:	STMNEIA	r3!, {ip,lr}
-	SUBNES	r2, r2, #0x01
-	BNE	22b
-3:	B	.LDecodeCoefs_PitchShiftComplete
-
-ulc_PitchShiftKey: .word 0
-.global ulc_PitchShiftKey
-
-.LDecodeCoefs_PitchShift_KeyScale: @ Floor[Table[2^(14-n/12), {n,-12,+12}] + 0.5]
-	.word 0x7FFF,0x78D1,0x7209,0x6BA2,0x6598
-	.word 0x5FE4,0x5A82,0x556E,0x50A3,0x4C1C
-	.word 0x47D6,0x43CE,0x4000,0x3C68,0x3904
-	.word 0x35D1,0x32CC,0x2FF2,0x2D41,0x2AB7
-	.word 0x2851,0x260E,0x23EB,0x21E7,0x2000
-
-@ Iterate backwards to avoid reading overwritten data
-@ For a given rate r, we store 1/r samples on average.
-@ To correctly cancel the energy to unity gain, we must
-@ scale one of the coefficients by 1-1/r.
-@ I believe that this code is scaling the coefficient
-@ on the wrong side (ie. scaling should be (1-1/r)^n,
-@ but due to backwards iteration, we are instead using
-@ (1-1/r)^(1-n)), but seems to be fine for the most part.
-.LDecodeCoefs_PitchShift_Up:
-	LDR	r5, [lr, -ip, lsl #0x02]    @ 1-1/r -> r5 [.14fxp -> .31fxp]
-	MUL	ip, r1, r0                  @ SrcPos = Rate * BlockSize [.14fxp]
-	ADD	r3, r3, r0, lsl #0x02       @ Dst = Buf + BlockSize   -> r3
-	MOV	lr, ip, lsr #0x0E           @ Src = Buf + (int)SrcPos -> r2
-	RSB	r5, r5, #0x01<<14
-	MOV	r5, r5, lsl #0x1F-14
-	LDR	r0, [r2, lr, lsl #0x02]!    @ Coef -> r0
-	ADD	lr, r1, ip, lsl #0x10+16-14 @ Rate [.14fxp] | SubPos<<16 [.16fxp]
-1:	SUBS	lr, lr, lr, lsl #0x10+16-14 @ SubPos += Rate?
-	STR	r0, [r3, #-0x04]!
-	SMULLCS	r0, r1, r5, r0              @ Not wrapped: Scale/cancel
-	LDRCC	r0, [r2, #-0x04]!           @ Wrapped: Load next coefficients
-	MOVCS	r0, r0, lsr #0x1F
-	ORRCS	r0, r0, r1, lsl #0x01
-	CMP	r3, sl                      @ Hit the start?
-	BHI	1b
-2:	@B	.LDecodeCoefs_PitchShiftComplete
-
-.LDecodeCoefs_PitchShiftComplete:
-
-/**************************************/
-.endif
-/**************************************/
 
 @ r0:
 @ r1:
@@ -451,7 +373,6 @@ ulc_PitchShiftKey: .word 0
 	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
 	MOV	r1, r0, lsr #0x10     @ s -> r1
 	BIC	r0, r0, r1, lsl #0x10 @ c -> r0
-.if ULC_64BIT_MATH
 	SMULL	r6, r7, r2, r1        @ *--OutHi = s*a + c*b -> r6,r7 [.16]
 	SMLAL	r6, r7, r3, r0
 	RSB	r3, r3, #0x00
@@ -461,15 +382,6 @@ ulc_PitchShiftKey: .word 0
 	ADC	r7, r6, r7, lsl #0x10
 	MOVS	r6, r0, lsr #0x10
 	ADC	r6, r6, r2, lsl #0x10
-.else
-	MUL	r6, r0, r2            @ c*a -> r6
-	MUL	r7, r1, r2            @ s*a -> r7
-	MUL	r2, r1, r3            @ s*b -> r2
-	MLA	r7, r0, r3, r7        @ *--OutHi = s*a + c*b
-	SUB	r6, r6, r2            @ *OutLo++ = c*a - s*b
-	MOV	r6, r6, asr #0x0F
-	MOV	r7, r7, asr #0x0F
-.endif
 	STR	r6, [ip], #0x04
 	STR	r7, [lr, #-0x04]!
 	CMP	ip, lr

@@ -231,12 +231,6 @@ main:
 0:	STR	r3, [r2, #0x08*BUTTON_PLAY_OBJ]
 
 .LMainLoop_ProcessButtons:
-.if ULC_ALLOW_PITCH_SHIFT
-	LSR	r1, r0, #0x06+1 @ Pitch up? (Up)
-	BCS	.LMainLoop_PitchUp
-	LSR	r1, r0, #0x07+1 @ Pitch down? (Down)
-	BCS	.LMainLoop_PitchDown
-.endif
 	LSR	r1, r0, #0x09+1 @ Previous song? (SL)
 	BCS	.LMainLoop_PreviousSong
 	LSR	r1, r0, #0x08+1 @ Next song? (SR)
@@ -278,24 +272,6 @@ main:
 	MVN	r1, r0    @ Any interrupt
 	SWI	0x04
 	B	.LMainLoop
-
-.LMainLoop_PitchUp:
-	LDR	r0, =ulc_PitchShiftKey
-	LDR	r1, [r0]
-	CMP	r1, #0x0C
-	BGE	.LMainLoop_ProcessState
-	ADD	r1, #0x01
-	STR	r1, [r0]
-	B	.LMainLoop_ProcessState
-
-.LMainLoop_PitchDown:
-	LDR	r0, =ulc_PitchShiftKey
-	LDR	r1, [r0]
-	ADD	r1, #0x0C-1
-	BLT	.LMainLoop_ProcessState
-	SUB	r1, #0x0C
-	STR	r1, [r0]
-	B	.LMainLoop_ProcessState
 
 .LMainLoop_PauseSong:
 	LDR	r0, [r4, #0x04] @ Toggle Pause flag
@@ -982,7 +958,7 @@ BgDesign_Map:
 BgDesign_Pal:
 	.incbin "source/res/BgDesign.pal"
 .if BACKDROP_ENABLE
-	.incbin "source/music/FrenchcoreMix/Backdrop.pal"
+	.incbin "source/music/ANewDawn/Backdrop.pal"
 .endif
 .size   BgDesign_Pal, .-BgDesign_Pal
 .global BgDesign_Pal
@@ -996,7 +972,7 @@ BgDesignSprites_Gfx:
 
 .if BACKDROP_ENABLE
 
-Backdrop_Gfx: .incbin "source/music/FrenchcoreMix/Backdrop.img.lz"
+Backdrop_Gfx: .incbin "source/music/ANewDawn/Backdrop.img.lz"
 .size Backdrop_Gfx, .-Backdrop_Gfx
 
 .endif
@@ -1052,7 +1028,8 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-	.word 19 @ Number of tracks
+.if 1
+	.word 20 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
 	.word  30f,  31f
@@ -1072,6 +1049,7 @@ SoundFiles:
 	.word 170f, 171f
 	.word 180f, 181f
 	.word 190f, 191f
+	.word 200f, 201f
 
 	.LSoundFiles_OriginSongName:
 	 11: .asciz "Rayvolt - And We Run"
@@ -1086,13 +1064,14 @@ SoundFiles:
 	101: .asciz "Juju Rush - Catching Fire"
 	111: .asciz "Vertex - Let It Roll"
 	121: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)"
-	131: .asciz "Toto - Africa (Rayvolt Remix)"
-	141: .asciz "Rayvolt - Wellerman"
-	151: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
-	161: .asciz "Re-Style & Korsakoff - Leap of Faith"
-	171: .asciz "Death Punch - Nowhere Warm"
-	181: .asciz "Dr. Peacock & Sefa - Incoming"
-	191: .asciz "Re-Style & Runeforce - A New Dawn"
+	131: .asciz "Re-Style - Wildfire"
+	141: .asciz "Toto - Africa (Rayvolt Remix)"
+	151: .asciz "Rayvolt - Wellerman"
+	161: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
+	171: .asciz "Re-Style & Korsakoff - Leap of Faith"
+	181: .asciz "Death Punch - Nowhere Warm"
+	191: .asciz "Dr. Peacock & Sefa - Incoming"
+	201: .asciz "Re-Style & Runeforce - A New Dawn"
 
 	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
 	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Vertex - Run It Up.ulc"
@@ -1106,13 +1085,21 @@ SoundFiles:
 	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
 	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
 	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Re-Style - Towards the Sun (Vertex & Rayvolt Remix).ulc"
-	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
-	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
-	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
-	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
-	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
-	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
-	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
+	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Re-Style - Wildfire.ulc"
+	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
+	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
+	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
+	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
+	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
+	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
+	.balign 4; 200: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
+.else
+	.word 1 @ Number of tracks
+	.word  10f,  11f
+	.LSoundFiles_OriginSongName:
+	11: .asciz "Re-Style & Runeforce - A New Dawn"
+	.balign 4;  10: .incbin "source/music/ANewDawn/Re-Style & Runeforce - A New Dawn (128k).ulc"
+.endif
 
 .size SoundFiles, .-SoundFiles
 
