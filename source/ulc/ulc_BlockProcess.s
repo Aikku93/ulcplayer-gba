@@ -148,7 +148,7 @@ ulc_BlockProcess:
 	AND	r5, r7, #0x0F
 	NextNybble
 	CMP	r5, #0x0E                         @ Normal quantizer? (8h,0h,0h..Dh)
-	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (8h,0h,Fh,Zh,Yh[,Xh])
+	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (8h,0h,Fh,Zh,Yh,Xh)
 	MOVCC	lr, r5
 	BCC	1f
 0:	AND	r5, r7, #0x0F
@@ -193,9 +193,10 @@ ulc_BlockProcess:
 	BEQ	.LDecodeCoefs_FillZeros
 
 .LDecodeCoefs_FillNoise:
+	MUL	ip, ip, ip
 	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 527 noise samples (Xh.bit[1..3] != 0)
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ Scale = v*Quant -> ip? (+.1 for .31->.32 scaling in rand(), -5 for quantizer bias)
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1-1 - 5 @ Scale = v^2*Quant/2 -> ip? (+.1 for .31->.32 scaling in rand(), -5 for quantizer bias)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
@@ -243,13 +244,12 @@ ulc_BlockProcess:
 	NextNybble
 	AND	r5, r7, #0x0F               @ r -> r5
 	NextNybble
-	MOVS	ip, ip, lsr #0x01
-	BCC	1f
-0:	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
+	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
 	MOV	r5, r5, ror #0x1C
 	NextNybble
-1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)*Quant
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1 - 5 @ Same as normal noise fill. Scale -> ip
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/8
+	MUL	ip, ip, ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1-3 - 5 @ Same as normal noise fill (minus 3 for 1/8 quantizer). Scale -> ip
 	MOVS	ip, ip, lsr lr
 	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
