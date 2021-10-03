@@ -517,6 +517,7 @@ ulc_BlockProcess:
 .if ULC_STEREO_SUPPORT
 	SUB	r0, r0, fp            @ Rewind OutBuf
 	ADDS	r0, r0, r0, lsl #0x1F @ Stereo, second channel?
+	LDRMIH	r4, [r5, #0x02]       @  Restore old LastSubBlockSize
 	STRMI	r0, [sp, #-0x04]!
 	BMI	.LChannels_Loop
 .endif
