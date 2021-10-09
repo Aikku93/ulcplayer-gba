@@ -34,7 +34,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/10/03)
+## Pre-built Demo (Last update: 2021/10/10)
 
 ### **WARNING: Flashing lights.**
 
