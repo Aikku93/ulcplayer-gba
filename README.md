@@ -24,6 +24,7 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Dr. Peacock](https://music.youtube.com/channel/UC3EjYttTVgJllvuttr6PzNw)
   * [Juju Rush](https://www.facebook.com/jujurush99/)
   * [Korsakoff](https://music.youtube.com/channel/UCIw93jBDgd-hHhSJAtvQNRA)
+  * Lune
   * [Mr. Ivex](https://music.youtube.com/channel/UCsrWJSnK1ZryH-92x00a4uA)
   * [Rayvolt](https://music.youtube.com/channel/UCUCZojA3_kduHSK_-bmYSAA)
   * [Re-Style](https://music.youtube.com/channel/UCL9cYAVYKKXubDZ-fXS4v4w)
@@ -34,12 +35,12 @@ The player supports both mono and stereo files and any block size up to 2048.
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/10/10)
+## Pre-built Demo (Last update: 2021/10/17)
 
 ### **WARNING: Flashing lights.**
 
 Files:
- * [~53kbps VBR (Q=49.4 @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~47kbps VBR (Q=44.9 @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Rayvolt - And We Run
@@ -54,11 +55,13 @@ Featuring:
  * Juju Rush - Catching Fire
  * Vertex - Let It Roll
  * Re-Style - Towards the Sun (Vertex & Rayvolt Remix)
+ * Vertex - Radiance
  * Re-Style - Wildfire
  * Toto - Africa (Rayvolt Remix)
  * Rayvolt - Wellerman
  * Vicetone & Tony Igy - Astronomia (Rayvolt Remix)
  * Re-Style & Korsakoff - Leap of Faith
+ * Runeforce ft. Lune - Lonely Soldier
  * Death Punch - Nowhere Warm
  * Dr. Peacock & Sefa - Incoming
  * Re-Style & Runeforce - A New Dawn

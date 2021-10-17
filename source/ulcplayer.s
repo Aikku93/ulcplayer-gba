@@ -1028,7 +1028,7 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-	.word 20 @ Number of tracks
+	.word 22 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
 	.word  30f,  31f
@@ -1049,6 +1049,8 @@ SoundFiles:
 	.word 180f, 181f
 	.word 190f, 191f
 	.word 200f, 201f
+	.word 210f, 211f
+	.word 220f, 221f
 
 	.LSoundFiles_OriginSongName:
 	 11: .asciz "Rayvolt - And We Run"
@@ -1063,14 +1065,16 @@ SoundFiles:
 	101: .asciz "Juju Rush - Catching Fire"
 	111: .asciz "Vertex - Let It Roll"
 	121: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)"
-	131: .asciz "Re-Style - Wildfire"
-	141: .asciz "Toto - Africa (Rayvolt Remix)"
-	151: .asciz "Rayvolt - Wellerman"
-	161: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
-	171: .asciz "Re-Style & Korsakoff - Leap of Faith"
-	181: .asciz "Death Punch - Nowhere Warm"
-	191: .asciz "Dr. Peacock & Sefa - Incoming"
-	201: .asciz "Re-Style & Runeforce - A New Dawn"
+	131: .asciz "Vertex - Radiance"
+	141: .asciz "Re-Style - Wildfire"
+	151: .asciz "Toto - Africa (Rayvolt Remix)"
+	161: .asciz "Rayvolt - Wellerman"
+	171: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
+	181: .asciz "Re-Style & Korsakoff - Leap of Faith"
+	191: .asciz "Runeforce ft. Lune - Lonely Soldier"
+	201: .asciz "Death Punch - Nowhere Warm"
+	211: .asciz "Dr. Peacock & Sefa - Incoming"
+	221: .asciz "Re-Style & Runeforce - A New Dawn"
 
 	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
 	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Vertex - Run It Up.ulc"
@@ -1084,14 +1088,16 @@ SoundFiles:
 	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
 	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
 	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Re-Style - Towards the Sun (Vertex & Rayvolt Remix).ulc"
-	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Re-Style - Wildfire.ulc"
-	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
-	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
-	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
-	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
-	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
-	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
-	.balign 4; 200: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
+	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Vertex - Radiance.ulc"
+	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Re-Style - Wildfire.ulc"
+	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
+	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
+	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
+	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
+	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Runeforce ft. Lune - Lonely Soldier.ulc"
+	.balign 4; 200: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
+	.balign 4; 210: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
+	.balign 4; 220: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
 
 .size SoundFiles, .-SoundFiles
 
