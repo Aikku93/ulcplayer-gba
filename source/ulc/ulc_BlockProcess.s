@@ -186,27 +186,27 @@ ulc_BlockProcess:
 	AND	ip, r7, #0x0F
 	ORR	r5, ip, r5, lsl #0x04
 	NextNybble
-	AND	ip, r7, #0x0F
-	NextNybble
-	MOVS	ip, ip, lsr #0x01 @ v -> ip
-	ADC	r5, r5, r5
+	ANDS	ip, r7, #0x0F
 	BEQ	.LDecodeCoefs_FillZeros
 
 .LDecodeCoefs_FillNoise:
+	NextNybble
 	MUL	ip, ip, ip
-	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 527 noise samples (Xh.bit[1..3] != 0)
+	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 271 noise samples (Xh != 0)
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1-1 - 5 @ Scale = v^2*Quant/2 -> ip? (+.1 for .31->.32 scaling in rand(), -5 for quantizer bias)
+	RSB	ip, ip, ip, lsl #0x02 @ v^2 *= Sqrt[2] [.1fxp]
+	SUB	ip, ip, ip, lsr #0x04
+	ADD	ip, ip, ip, lsr #0x07
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-1-5 - 5 @ Scale = v^2*Quant/32 -> ip? (-1 for .1fxp in scaling, -5 for quantizer)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
 	EOR	r5, r6, r7, ror #0x17 @ Seed = [random garbage] -> r5
-1:	SMULL	r0, r1, r5, ip        @ Rand*Scale -> r0,r1
-	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift generator
-	EOR	r5, r5, r5, lsr #0x11
-	EOR	r5, r5, r5, lsl #0x05
+1:	MOVS	r5, r5, lsr #0x01     @ <- Galois LFSR PRNG (similar to GBA/NDS PSG noise, but 31bit period)
+	EORCS	r5, r5, #0x60000000
+	RSBCS	ip, ip, #0x00         @ Sign flip at random
 	ADDS	lr, lr, #0x01<<8
-	STR	r1, [sl], #0x04
+	STR	ip, [sl], #0x04
 	BCC	1b
 2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
 	MOV	r1, #0x00
@@ -218,13 +218,14 @@ ulc_BlockProcess:
 	NextNybble
 	ANDS	r5, r7, #0x0F           @ Quantizer change? (8h,0h,Xh)
 	BEQ	.LDecodeCoefs_ChangeQuant
-	NextNybble
-	@B	.LDecodeCoefs_FillZeros @ 8h,1h..Fh: Zero run (1 .. 15 coefficients)
-	@ Z=1 cannot happen from NextNybble macro, so biasing is not used in fall-through
+	@NextNybble
+	@B	.LDecodeCoefs_FillZeros_PostBiasCore @ 8h,1h..Fh: Zero run (1 .. 15 coefficients)
+	@ Z=1 cannot happen here (even if NextNybble was uncommented), so biasing is not used in fall-through
 
 @ Must enter with Z=1 to trigger biasing
 .LDecodeCoefs_FillZeros:
-	ADDEQ	r5, r5, #0x1F         @ 0h,Zh,Yh,Xh: 31 .. 542 zeros (Xh.bit[1..3] == 0)
+	ADDEQ	r5, r5, #0x1F         @ 0h,Zh,Yh,Xh: 31 .. 286 zeros (Xh == 0)
+	NextNybble
 .LDecodeCoefs_FillZeros_PostBiasCore:
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= zR
 .LDecodeCoefs_FillZeros_PostDecCore:
@@ -247,21 +248,24 @@ ulc_BlockProcess:
 	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
 	MOV	r5, r5, ror #0x1C
 	NextNybble
-1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/8
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/32
 	MUL	ip, ip, ip
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION+1-3 - 5 @ Same as normal noise fill (minus 3 for 1/8 quantizer). Scale -> ip
+	RSB	ip, ip, ip, lsl #0x02       @ (v+1)^2 *= Sqrt[2] [.1fxp]
+	SUB	ip, ip, ip, lsr #0x04
+	ADD	ip, ip, ip, lsr #0x07
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-1-5 - 5 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
 	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
 	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
 	SUB	lr, r0, lr, lsl #0x20-16
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
-1:	SMULL	r0, r1, r5, ip        @ Rand*Scale -> r0,r1
-	UMULL	r0, ip, lr, ip        @ Scale *= Decay
-	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift generator
-	EOR	r5, r5, r5, lsr #0x11
-	EOR	r5, r5, r5, lsl #0x05
-	ADDS	fp, fp, #0x01<<16     @ --CoefRem?
+1:	MOVS	r5, r5, lsr #0x01   @ <- Galois LFSR PRNG
+	EORCS	r5, r5, #0x60000000
+	MOVCC	r1, ip              @ Random sign
+	RSBCS	r1, ip, #0x00
+	UMULL	r0, ip, lr, ip      @ Scale *= Decay
+	ADDS	fp, fp, #0x01<<16   @ --CoefRem?
 	STR	r1, [sl], #0x04
 	BCC	1b
 
