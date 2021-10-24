@@ -194,10 +194,7 @@ ulc_BlockProcess:
 	MUL	ip, ip, ip
 	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 271 noise samples (Xh != 0)
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
-	RSB	ip, ip, ip, lsl #0x02 @ v^2 *= Sqrt[2] [.1fxp]
-	SUB	ip, ip, ip, lsr #0x04
-	ADD	ip, ip, ip, lsr #0x07
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-1-5 - 5 @ Scale = v^2*Quant/32 -> ip? (-1 for .1fxp in scaling, -5 for quantizer)
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 5 @ Scale = v^2*Quant/32 -> ip? (-5 for quantizer bias)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
@@ -250,10 +247,7 @@ ulc_BlockProcess:
 	NextNybble
 1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/32
 	MUL	ip, ip, ip
-	RSB	ip, ip, ip, lsl #0x02       @ (v+1)^2 *= Sqrt[2] [.1fxp]
-	SUB	ip, ip, ip, lsr #0x04
-	ADD	ip, ip, ip, lsr #0x07
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-1-5 - 5 @ Same as normal noise fill. Scale -> ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 5 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
 	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
