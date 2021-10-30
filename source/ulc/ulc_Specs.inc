@@ -37,5 +37,4 @@
 @ to anything larger, MDCT coefficients will overflow.
 @ NOTE: This refers to the internal precision, not the
 @ final audio output; this is always 8bit for GBA.
-.equ ULC_64BIT_MATH,      1
 .equ ULC_COEF_PRECISION, 28
