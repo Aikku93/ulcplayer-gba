@@ -15,7 +15,7 @@
 
 @ Returns the number of bytes read
 
-.equ QSCALE_BASE, (0x5025 | (0x18+5 - ULC_COEF_PRECISION)<<7) @ "MOV r5, r5, lsr #X", lower hword
+.equ QSCALE_BASE, (0x5045 | (0x18+5 - ULC_COEF_PRECISION)<<7) @ "MOV r5, r5, asr #X", lower hword
 .equ QSCALE_ZERO, 0x5025 @ "MOV r5, r5, lsr #32", lower hword
 
 ulc_BlockProcess:
@@ -157,8 +157,10 @@ ulc_BlockProcess:
 	SUBEQ	r5, r0, fp, asr #0x10             @  Treat as zero-fill with N=CoefRem
 	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
 	ADD	lr, r5, #0x0E                     @ Extended-precision quantizer (8h,0h,Eh,0h..Ch)
+.if 0x20-24-5+ULC_COEF_PRECISION <= 0xE+0xC       @ <- Only clip when the smallest quantizer is out of bounds of our precision
 	CMP	lr, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
 	EORCS	r5, r9, #QSCALE_BASE ^ QSCALE_ZERO
+.endif
 1:	ADDCC	r5, r9, lr, lsl #0x07             @ Modify the quantizer instruction
 	STRH	r5, .LDecodeCoefs_Normal_Shifter
 
@@ -168,16 +170,19 @@ ulc_BlockProcess:
 	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
 
 .LDecodeCoefs_Normal:
+	ADR	ip, .LDecodeCoefs_Normal_Uncompanded
+	LDR	r5, [ip, r5, lsr #0x1C-2] @ Using a LUT is 1c faster than raw maths
 	NextNybble
-	MOVS	ip, r5, asr #0x10 @ 4.12fxp
-	MULNE	r5, ip, ip        @ 7.24fxp <- Non-linear quantization (technically 8.24fxp but lost sign bit)
 .LDecodeCoefs_Normal_Shifter:
-	MOV	r5, r5, lsr #0x00 @ Coef=QCoef*2^(-24+ACCURACY-Quant) -> r5 (NOTE: Self-modifying dequantization)
-	RSBMI	r5, r5, #0x00     @ Restore sign after dequantization (round towards 0)
+	MOV	r5, r5, asr #0x00 @ Coef=QCoef*2^(-24+ACCURACY-Quant) -> r5 (NOTE: Self-modifying dequantization)
 	STR	r5, [sl], #0x04   @ Coefs[n++] = Coef
 	ADDS	fp, fp, #0x01<<16 @ --CoefRem?
 	BCC	.LDecodeCoefs_DecodeLoop
 1:	B	.LDecodeCoefs_NoMoreCoefs
+
+.LDecodeCoefs_Normal_Uncompanded:
+	.word 0x00000000,+0x01000000,+0x04000000,+0x09000000,+0x10000000,+0x19000000,+0x24000000,+0x31000000
+	.word 0x00000000,-0x31000000,-0x24000000,-0x19000000,-0x10000000,-0x09000000,-0x04000000,-0x01000000
 
 .LDecodeCoefs_FillRun:
 	NextNybble
@@ -315,7 +320,11 @@ ulc_BlockProcess:
 	MOVNE	lr, r9, lsr #0x10     @  Y: OverlapSize >>= (WindowCtrl&7)
 	ANDNE	lr, lr, #0x07
 	MOVNE	r6, r6, lsr lr
+.if ULC_USE_QUADRATURE_OSC
+	LDR	r9, =0x077CB531
+.else
 	LDR	r9, =Fourier_CosSin - 0x02*16
+.endif
 	CMP	r6, ip                @ OverlapSize > LastSubBlockSize?
 	MOVHI	r6, ip                @  Y: OverlapSize = LastSubBlockSize
 	MOV	r4, r4, lsr #0x10     @ LastSubBlockSize = SubBlockSize -> r4
@@ -330,8 +339,12 @@ ulc_BlockProcess:
 	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo(=TempBuffer) -> ip
 	ADD	lr, ip, r4, lsl #0x02            @ OutHi = OutLo+SubBlockSize -> lr
 	ADD	sl, sl, r4, lsl #0x02-1          @ Skip the next-block aliased samples (Src += SubBlockSize/2)
-0:	ADD	r9, r9, r6, lsl #0x01 @ Index the Cos/Sin table by OverlapSize
-	RSBS	r6, r6, r4            @ Have any non-overlap samples? (nNonOverlap = SubBlockSize-OverlapSize -> r6)
+.if ULC_USE_QUADRATURE_OSC
+	MUL	r7, r9, r6
+.else
+	ADD	r9, r9, r6, lsl #0x01            @ Index the Cos/Sin table by OverlapSize
+.endif
+	RSBS	r6, r6, r4                       @ Have any non-overlap samples? (nNonOverlap = SubBlockSize-OverlapSize -> r6)
 	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap
 
 @ r0: [Scratch]
@@ -366,6 +379,43 @@ ulc_BlockProcess:
 	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_End
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_Overlap:
+.if ULC_USE_QUADRATURE_OSC
+	LDR	r0, =_IRQProc_Log2Tab
+	LDR	r1, =Fourier_CosSin - 0x04*4 @ Table starts at N=16 (4=Log2[16])
+	LDRB	r0, [r0, r7, lsr #0x20-5]    @ Log2[OverlapSize] -> r0
+	LDR	r2, .LQuadOscShiftS_Base
+	LDR	r3, .LQuadOscShiftC_Base
+	LDR	r7, [r1, r0, lsl #0x02]      @ c | s<<20 -> r7
+	ADD	r2, r2, r0, lsl #0x07        @ Modify the shift instructions for this OverlapSize (x >> Log2[OverlapSize])
+	ADD	r3, r3, r0, lsl #0x07
+	STR	r2, .LQuadOscShiftS
+	STR	r3, .LQuadOscShiftC
+	MOV	r0, r7, lsr #0x14            @ s -> r0
+	BIC	r1, r7, r0, lsl #0x14        @ c -> r1
+0:	LDR	r2, [r8, #-0x04]!     @ a = *--Lap -> r2
+	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
+	SMULL	r6, r7, r2, r0        @ *--OutHi = s*a + c*b -> r6,r7 [.16]
+	SMLAL	r6, r7, r3, r1
+	RSB	r3, r3, #0x00
+	SMULL	r9, r2, r2, r1        @ *OutLo++ = c*a - s*b -> r9,r2 [.16] <- GCC complains about this, but should be fine
+	SMLAL	r9, r2, r3, r0
+	MOVS	r6, r6, lsr #0x10     @ Shift down and round
+	ADC	r7, r6, r7, lsl #0x10
+	MOVS	r6, r9, lsr #0x10
+	ADC	r6, r6, r2, lsl #0x10
+	STR	r6, [ip], #0x04
+	STR	r7, [lr, #-0x04]!
+	ADD	r6, r0, r0, lsr #0x02 @ c -= s*a
+	ADD	r6, r6, r6, lsr #0x02
+	ADD	r7, r1, r1, lsr #0x02 @ s += c*a
+	ADD	r7, r7, r7, lsr #0x02
+.LQuadOscShiftS:
+	ADD	r0, r0, r7, lsr #0x00 @ <- Self-modifying
+.LQuadOscShiftC:
+	SUB	r1, r1, r6, lsr #0x00 @ <- Self-modifying
+	CMP	ip, lr
+	BNE	0b
+.else
 0:	LDR	r0, [r9], #0x04       @ c | s<<16 -> r0
 	LDR	r2, [r8, #-0x04]!     @ a = *--Lap -> r2
 	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
@@ -384,6 +434,7 @@ ulc_BlockProcess:
 	STR	r7, [lr, #-0x04]!
 	CMP	ip, lr
 	BNE	0b
+.endif
 
 .LDecodeCoefs_SubBlockLoop_IMDCT_End:
 	SUB	sl, sl, r4, lsl #0x02 @ Store lapped samples from start of SrcBuf to LapBuf
@@ -626,6 +677,15 @@ ulc_BlockProcess:
 .endif
 3:	@MOV	r0, #0x00 @ No bytes were read
 	B	.LExit
+
+/**************************************/
+
+.if ULC_USE_QUADRATURE_OSC
+
+.LQuadOscShiftS_Base: ADD r0, r0, r7, lsr #0x20 @ <- I am not crazy; enabling LSR with Shift=0 is interpreted as this
+.LQuadOscShiftC_Base: SUB r1, r1, r6, lsr #0x20
+
+.endif
 
 /**************************************/
 .size   ulc_BlockProcess, .-ulc_BlockProcess
