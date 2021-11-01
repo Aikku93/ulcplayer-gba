@@ -79,21 +79,18 @@ Fourier_DCT2:
 @ r0: &Buf
 
 @ Rotations performed via shear matrices.
-@  s1_4:    (1+2^-5)(1+2^-7)(1-2^-2)*2^-2
-@  t1_5:    (1+2^-2)(1+2^-2)(1+2^-7)*2^-4
-@  s3_4:    (1+2^-4)(1+2^-4)(1-2^-6)*2^-1
-@  t3_5:    (1+2^-3)(1+2^-4)(1+2^-6)*2^-2
-@  s6_4:    (1-2^-6)(1-2^-5)(1-2^-5)
-@  t6_5:    (1+2^-2)(1+2^-4)(1+2^-7)*2^-1
-@  sqrt1_2: (1-2^-2)(1-2^-4)(1+2^-7)
-@ The factorizations were found using a joint
-@ bruteforce method to minimize this metric:
-@  CosApprox = 2 / (1 + TanApprox^2) - 1
-@  NormError = (Sqrt[SinApprox^2 + CosApprox^2] - 1)^2
-@  ((SinApprox-Sin)^2 + (CosApprox-Cos)^2) * (1 + NormError)
+@ Each coefficient was tuned to have at least 117dB PSNR.
+@ 117dB = 20Log10[2^16 * Log2[2048]]
+@  s1_4:    (1+2^-2)(1+2^-2)                *2^-3 | 136.32dB
+@  t1_5:    (1+2^-2)(1+2^-2)                *2^-4 | 123.13dB
+@  s3_4:    (1+2^-4)(1+2^-4)(1-2^-6)        *2^-1 | 167.94dB
+@  t3_5:    (1+2^-2)(1-2^-5)                *2^-2 | 128.52dB
+@  s6_4:    (1-2^-6)(1-2^-4)                      | 119.52dB
+@  t6_5:    (1+2^-2)(1+2^-4)(1+2^-7)        *2^-1 | 118.79dB
+@  sqrt1_2: (1+2^-7)(1-2^-9)(1-2^-4)(1-2^-2)      | 155.80dB
 
 .LDCT2_8:
-	STMFD	sp!, {r4-fp,lr}
+	STMFD	sp!, {r4-r8,lr}
 	LDMIA	r0, {r1-r8}
 0:	ADD	r4, r4, r5            @ s34 -> r4
 	ADD	r3, r3, r6            @ s25 -> r3
@@ -107,61 +104,58 @@ Fourier_DCT2:
 	ADD	r2, r2, r3            @ ss16s25 -> r2
 	SUB	r3, r2, r3, lsl #0x01 @ ds16s25 -> r3
 	SUB	r4, r1, r4, lsl #0x01 @ ds07s34 -> r4
-1:	ADD	r9, r8, r8, asr #0x03 @ t = d34 + t3_5*d07
-	ADD	r9, r9, r9, asr #0x04
-	ADD	r9, r9, r9, asr #0x06
-	ADD	r9, r5, r9, asr #0x02
-	ADD	sl, r9, r9, asr #0x04 @ d34d07y = d07 - t*s3_4 -> sl
-	ADD	sl, sl, sl, asr #0x04
-	SUB	sl, sl, sl, asr #0x06
-	SUB	sl, r8, sl, asr #0x01
-	ADD	r8, sl, sl, asr #0x03 @ d34d07x = t + d34d07y*t3_5 -> r9
-	ADD	r8, r8, r8, asr #0x04
-	ADD	r8, r8, r8, asr #0x06
-	ADD	r9, r9, r8, asr #0x02
+1:	ADD	lr, r8, r8, asr #0x02 @ t = d34 + t3_5*d07
+	SUB	lr, lr, lr, asr #0x05
+	ADD	lr, r5, lr, asr #0x02
+	ADD	ip, lr, lr, asr #0x04 @ d34d07y = d07 - t*s3_4 -> ip
+	ADD	ip, ip, ip, asr #0x04
+	SUB	ip, ip, ip, asr #0x06
+	SUB	ip, r8, ip, asr #0x01
+	ADD	r8, ip, ip, asr #0x02 @ d34d07x = t + d34d07y*t3_5 -> lr
+	SUB	r8, r8, r8, asr #0x05
+	ADD	lr, lr, r8, asr #0x02
 1:	ADD	r5, r7, r7, asr #0x02 @ t = d25 + t1_5*d16
 	ADD	r5, r5, r5, asr #0x02
-	ADD	r5, r5, r5, asr #0x07
 	ADD	r5, r6, r5, asr #0x04
-	ADD	r8, r5, r5, asr #0x05 @ d25d16y = d16 - t*s1_4 -> r8
-	ADD	r8, r8, r8, asr #0x07
-	SUB	r8, r8, r8, asr #0x02
-	SUB	r8, r7, r8, asr #0x03
-	ADD	r7, r8, r8, asr #0x02 @ d25d16x = t + d25d16y*t1_5 -> r5
-	ADD	r7, r7, r7, asr #0x02
-	ADD	r7, r7, r7, asr #0x07
-	ADD	r5, r5, r7, asr #0x04
+	ADD	r6, r5, r5, asr #0x02 @ d25d16y = d16 - t*s1_4 -> r7
+	ADD	r6, r6, r6, asr #0x02
+	SUB	r7, r7, r6, asr #0x03
+	ADD	r8, r7, r7, asr #0x02 @ d25d16x = t + d25d16y*t1_5 -> r8
+	ADD	r8, r8, r8, asr #0x02
+	ADD	r8, r5, r8, asr #0x04
 2:	ADD	r1, r1, r2            @ a0 = ss07s34 + ss16s25 -> r1 = X0
-	SUB	r7, r1, r2, lsl #0x01 @ b0 = ss07s34 - ss16s25 -> r7 = X4/sqrt1_2
-	SUB	r7, r7, r7, asr #0x02 @ [X4 -> r7]
-	SUB	r7, r7, r7, asr #0x04
-	ADD	r7, r7, r7, asr #0x07
-	ADD	sl, sl, r5            @ a1 = d34d07y + d25d16x -> sl
-	SUB	r5, sl, r5, lsl #0x01 @ c1 = d34d07y - d25d16x -> r5 = X3
-	ADD	r9, r9, r8            @ d1 = d34d07x + d25d16y -> r9
-	SUB	r8, r9, r8, lsl #0x01 @ b1 = d34d07x - d25d16y -> r8 = X5
-	ADD	r2, sl, r9            @ (a1+d1)*sqrt1_2 = X1 -> r2
-	SUB	ip, sl, r9            @ (a1-d1)*sqrt1_2 = X7 -> ip
-	SUB	r2, r2, r2, asr #0x02
-	SUB	r2, r2, r2, asr #0x04
+	SUB	r5, r1, r2, lsl #0x01 @ b0 = ss07s34 - ss16s25 -> r5 = X4/sqrt1_2
+	ADD	r5, r5, r5, asr #0x07 @ [X4 -> r5]
+	SUB	r5, r5, r5, asr #0x09
+	SUB	r5, r5, r5, asr #0x04
+	SUB	r5, r5, r5, asr #0x02
+	ADD	lr, lr, r7            @ d1 = d34d07x + d25d16y -> lr
+	SUB	r6, lr, r7, lsl #0x01 @ b1 = d34d07x - d25d16y -> r6 = X5
+	ADD	r2, r4, r4, asr #0x02 @ t = ds16s25 + t6_5*ds07s34
+        ADD	r2, r2, r2, asr #0x04
+        ADD	r2, r2, r2, asr #0x07
+        ADD	r2, r3, r2, asr #0x01
+        SUB	r7, r2, r2, asr #0x06 @ d0 = ds07s34 - t*s6_4 -> r7 = X6
+        SUB	r7, r7, r7, asr #0x04
+        SUB	r7, r4, r7
+	ADD	r3, r7, r7, asr #0x02 @ c0 = t + d0*t6_5      -> r3 = X2
+	ADD	r3, r3, r3, asr #0x04
+	ADD	r3, r3, r3, asr #0x07
+	ADD	r3, r2, r3, asr #0x01
+	ADD	ip, ip, r8            @ a1 = d34d07y + d25d16x -> ip
+	SUB	r4, ip, r8, lsl #0x01 @ c1 = d34d07y - d25d16x -> r4 = X3
+	ADD	r2, ip, lr            @ (a1+d1)*sqrt1_2 = X1 -> r2
+	SUB	r8, ip, lr            @ (a1-d1)*sqrt1_2 = X7 -> r8
 	ADD	r2, r2, r2, asr #0x07
-	SUB	ip, ip, ip, asr #0x02
-	SUB	ip, ip, ip, asr #0x04
-	ADD	ip, ip, ip, asr #0x07
-        SUB	r6, r4, r4, asr #0x02 @ t = ds16s25 + t6_5*ds07s34
-        SUB	r6, r6, r6, asr #0x03
-        ADD	r6, r6, r6, asr #0x06
-        ADD	r6, r3, r6
-        SUB	sl, r6, r6, asr #0x06 @ d0 = ds07s34 - t*s6_4 -> r9 = X6
-        SUB	sl, sl, sl, asr #0x05
-        SUB	sl, sl, sl, asr #0x05
-        SUB	r9, r4, sl
-	ADD	r4, r9, r9, asr #0x02 @ c0 = t + d0*t6_5      -> r4 = X2
-	ADD	r4, r4, r4, asr #0x04
-	ADD	r4, r4, r4, asr #0x07
-	ADD	r4, r6, r4, asr #0x01
-	STMIA	r0, {r1,r2,r4,r5,r7,r8,r9,ip}
-2:	LDMFD	sp!, {r4-fp,pc}
+	SUB	r2, r2, r2, asr #0x09
+	SUB	r2, r2, r2, asr #0x04
+	SUB	r2, r2, r2, asr #0x02
+	ADD	r8, r8, r8, asr #0x07
+	SUB	r8, r8, r8, asr #0x09
+	SUB	r8, r8, r8, asr #0x04
+	SUB	r8, r8, r8, asr #0x02
+	STMIA	r0, {r1-r8}
+2:	LDMFD	sp!, {r4-r8,pc}
 
 /**************************************/
 .size   Fourier_DCT2, .-Fourier_DCT2
