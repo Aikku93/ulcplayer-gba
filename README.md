@@ -14,7 +14,7 @@ To use this player, you must:
 
 By default, the player uses a quadrature oscillator for [IM]DCT routines, and supports both mono and stereo files and any block size up to 2048.
 
-Memory usage is 3.1KiB IWRAM code, up to 24KiB IWRAM data (maximum block size of 2048, stereo enabled), and 236 bytes of ROM (or up to 8.2KiB when using LUT mode).
+For stereo audio and a maximum block size of 2048 samples, memory usage is 3.1KiB IWRAM code, 24KiB IWRAM data, ~8KiB EWRAM data, and 236 bytes of ROM (or 8.2KiB when using LUT mode).
 
 ## Authors
  * **Ruben Nunez** - *Initial work* - [Aikku93](https://github.com/Aikku93)
