@@ -14,6 +14,12 @@
 @ usage for the transform and playback buffers.
 .equ ULC_STEREO_SUPPORT, 1
 
+@ This chooses whether to use a LUT for the trig terms
+@ or a quadrature oscillator. The oscillator is slightly
+@ faster than the LUT method and uses ~8kB less ROM, but
+@ is slightly less accurate.
+.equ ULC_USE_QUADRATURE_OSC, 1
+
 @ This controls the bitdepth of the audio, excluding the
 @ sign bit (eg. 16bit coefficients would set this to 15).
 @ This should be set as high as possible, regardless of

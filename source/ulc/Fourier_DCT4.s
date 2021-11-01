@@ -19,15 +19,77 @@ Fourier_DCT4:
 
 .LButterflies:
 	STMFD	sp!, {r2,r4-fp,lr}
+.if ULC_USE_QUADRATURE_OSC
+	LDR	ip, =0x077CB531
+	LDR	lr, =_IRQProc_Log2Tab
+	MUL	r3, ip, r2
+.else
 	LDR	fp, =Fourier_CosSin - 0x04*(16/2)
+.endif
 0:	ADD	r8, r0, r2, lsl #0x02   @ SrcHi = Tmp+N
 	ADD	r9, r1, r2, lsl #0x02-1 @ DstHi = Tmp+N/2
+.if ULC_USE_QUADRATURE_OSC
+	LDRB	r3, [lr, r3, lsr #0x20-5] @ Log2[N] -> r3
+	LDR	fp, =Fourier_CosSin - 0x04*4 @ Table starts at N=16 (4=Log2[16])
+	LDR	ip, .LQuadOscShiftS_Base
+	LDR	lr, .LQuadOscShiftC_Base
+	LDR	fp, [fp, r3, lsl #0x02] @ c | s<<20 -> fp
+	ADD	ip, ip, r3, lsl #0x07   @ Modify the shift instructions for this N (x >> Log2[N])
+	ADD	lr, lr, r3, lsl #0x07
+	STR	ip, .LQuadOscShiftS00   @ Ouch. We have to modify 8 instructions because the loop
+	STR	ip, .LQuadOscShiftS01   @ processes two samples per iteration (due to a sign-flip
+	STR	ip, .LQuadOscShiftS10   @ for the DST-via-DCT on one side), and we then unrolled
+	STR	ip, .LQuadOscShiftS11   @ two iterations, and every sample has to update the
+	STR	lr, .LQuadOscShiftC00   @ oscillator values.
+	STR	lr, .LQuadOscShiftC01
+	STR	lr, .LQuadOscShiftC10
+	STR	lr, .LQuadOscShiftC11
+	MOV	sl, fp, lsr #0x14       @ s -> sl
+	BIC	fp, fp, sl, lsl #0x14   @ c -> fp
+.else
 	ADD	fp, fp, r2, lsl #0x01
+.endif
 1:
-.rept 2
-	LDMIA	fp!, {ip,lr}          @ cs -> ip,lr
+.irp x, 0,1
 	LDMIA	r0!, {r2-r3}          @ a = *SrcLo++
 	LDMDB	r8!, {r4-r5}          @ b = *--SrcHi
+.if ULC_USE_QUADRATURE_OSC
+	SMULL	r6, r7, r2, fp        @ Lo0 = c*a + s*b -> r6,r7 [.16]
+	SMLAL	r6, r7, r5, sl
+	RSB	r5, r5, #0x00
+	SMULL	ip, lr, r5, fp        @ Hi0 = s*a - c*b -> ip,lr [.16]
+	SMLAL	ip, lr, r2, sl
+	MOVS	r2, r6, lsr #0x10     @ Lo0 -> r2 [.0 + Round]
+	ADC	r2, r2, r7, lsl #0x10
+	MOVS	r5, ip, lsr #0x10     @ Hi0 -> r5 [.0 + Round]
+	ADC	r5, r5, lr, lsl #0x10
+	ADD	ip, sl, sl, lsr #0x02 @ c -= s*a
+	ADD	ip, ip, ip, lsr #0x02
+	ADD	lr, fp, fp, lsr #0x02 @ s += c*a
+	ADD	lr, lr, lr, lsr #0x02
+.LQuadOscShiftS0\x:
+	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
+.LQuadOscShiftC0\x:
+	SUB	fp, fp, ip, lsr #0x00 @ <- Self-modifying
+	SMULL	r6, r7, r3, fp        @ Lo1 = c*a + s*b -> r6,r7 [.16]
+	SMLAL	r6, r7, r4, sl
+	RSB	r3, r3, #0x00
+	SMULL	ip, lr, r4, fp        @ Hi1 = -s*a + c*b -> ip,lr [.16]
+	SMLAL	ip, lr, r3, sl
+	MOVS	r3, r6, lsr #0x10     @ Lo1 -> r3 [.0 + Round]
+	ADC	r3, r3, r7, lsl #0x10
+	MOVS	r6, ip, lsr #0x10     @ Hi1 -> r6 [.0 + Round]
+	ADC	r6, r6, lr, lsl #0x10
+	ADD	ip, sl, sl, lsr #0x02 @ c -= s*a
+	ADD	ip, ip, ip, lsr #0x02
+	ADD	lr, fp, fp, lsr #0x02 @ s += c*a
+	ADD	lr, lr, lr, lsr #0x02
+.LQuadOscShiftS1\x:
+	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
+.LQuadOscShiftC1\x:
+	SUB	fp, fp, ip, lsr #0x00 @ <- Self-modifying
+.else
+	LDMIA	fp!, {ip,lr}          @ cs -> ip,lr
 	MOV	sl, ip, lsr #0x10     @ s -> sl
 	BIC	ip, ip, sl, lsl #0x10 @ c -> ip
 	SMULL	r6, r7, r2, ip        @ Lo0 = c*a + s*b -> r6,r7 [.16]
@@ -50,6 +112,7 @@ Fourier_DCT4:
 	ADC	r3, r3, r7, lsl #0x10
 	MOVS	r6, r4, lsr #0x10     @ Hi1 -> r6 [.0 + Round]
 	ADC	r6, r6, lr, lsl #0x10
+.endif
 	STMIA	r1!, {r2,r3}
 	STMIA	r9!, {r5,r6}
 .endr
@@ -106,6 +169,13 @@ Fourier_DCT4:
 	ADD	r0, r0, lr
 	STMIA	ip!, {r0-r6}
 3:	LDMFD	sp!, {r4-fp,pc}
+
+.if ULC_USE_QUADRATURE_OSC
+
+.LQuadOscShiftS_Base: ADD sl, sl, lr, lsr #0x20 @ <- I am not crazy; enabling LSR with Shift=0 is interpreted as this
+.LQuadOscShiftC_Base: SUB fp, fp, ip, lsr #0x20
+
+.endif
 
 /**************************************/
 
