@@ -640,6 +640,44 @@ VBlankIRQ:
 	STREQ	r1, .LVBlankIRQ_TrackScroll
 .LVBlankIRQ_DrawTrackName_NoRedraw:
 
+@ Perform a pre-pass to make the data more lively
+@ This propagates the graph outwards from the center
+.LVBlankIRQ_DrawGraph_PrePass:
+	ADR	r0, .LVBlankIRQ_GraphDataCur+GRAPH_W/2
+0:	LDR	ip, =((1<<16)-1)/GRAPH_W + 1
+	MOV	r1, r0
+	LDRB	r2, [r0]
+	LDRB	r3, [r1, #-0x01]
+1:	LDRB	r6, [r0, #-0x01]
+	LDRB	r7, [r1]
+	MOV	lr, ip, lsr #0x18
+	SUB	r2, r2, r6
+	SUB	r3, r3, r7
+	MUL	r2, lr, r2
+	MUL	r3, lr, r3
+	ADD	r2, r6, r2, asr #0x08
+	ADD	r3, r7, r3, asr #0x08
+	STRB	r2, [r0, #-0x01]!
+	STRB	r3, [r1], #0x01
+	ADD	ip, ip, ip, lsl #0x10+1
+	LDRB	r2, [r0, #-0x01]
+	LDRB	r3, [r1]
+	MOV	lr, ip, lsr #0x18
+	SUB	r6, r6, r2
+	SUB	r7, r7, r3
+	MUL	r6, lr, r6
+	MUL	r7, lr, r7
+	ADD	r6, r2, r6, asr #0x08
+	ADD	r7, r3, r7, asr #0x08
+	STRB	r6, [r0, #-0x01]!
+	STRB	r7, [r1], #0x01
+	ADDS	ip, ip, ip, lsl #0x10+1
+	BCC	1b
+2:	ADR	r1, .LVBlankIRQ_GraphDataAvg
+	CMP	r0, r1
+	ADDNE	r0, r1, #GRAPH_W/2
+	BNE	0b
+
 @ r4: &State
 @ r5:  SmpOfs
 @ sl:  BlockSize
@@ -728,7 +766,7 @@ VBlankIRQ:
 	STRNE	r7, .LVBlankIRQ_BackdropEnergy
 0:	MOV	r0, #0x0100
 	SUBS	r1, r7, #0x010000
-	SUBCS	r0, r0, r1, lsr #0x0E  @ Scale = 1 - Max[0,LPEnergy-ARBITRARY_OFFSET]/ARBITRAY_SCALE_FACTOR -> r0
+	SUBCS	r0, r0, r1, lsr #0x0D  @ Scale = 1 - Max[0,LPEnergy-ARBITRARY_OFFSET]/ARBITRAY_SCALE_FACTOR -> r0
 	MOV	r1, #GRAPH_W/2+GRAPH_X @ Adjust XOFS/YOFS based on scaling (TONC bg_rotscale_ex() formula)
 	MUL	r2, r0, r1
 	MOV	r1, #GRAPH_H/2+GRAPH_Y
@@ -744,7 +782,7 @@ VBlankIRQ:
 @ r7: LPEnergy
 .LVBlankIRQ_BrightenBackdrop:
 	MOV	r0, #0x14 @ Brightness = 20/32 + Energy/ARBITRAY_SCALE_FACTOR -> r0 [.5fxp]
-	ADD	r0, r0, r7, lsr #0x0D
+	ADD	r0, r0, r7, lsr #0x0E
 	CMP	r0, #0x20
 	MOVHI	r0, #0x20
 	LDR	r1, =0x03E07C1F
