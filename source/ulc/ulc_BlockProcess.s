@@ -199,7 +199,7 @@ ulc_BlockProcess:
 	MUL	ip, ip, ip
 	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 271 noise samples (Xh != 0)
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 5 @ Scale = v^2*Quant/32 -> ip? (-5 for quantizer bias)
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Scale = v^2*Quant/16 -> ip? (-5 for quantizer bias)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
@@ -250,14 +250,15 @@ ulc_BlockProcess:
 	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
 	MOV	r5, r5, ror #0x1C
 	NextNybble
-1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/32
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/16
 	MUL	ip, ip, ip
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 5 @ Same as normal noise fill. Scale -> ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
 	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
 	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	SUB	lr, r0, lr, lsl #0x20-16
+	SUBS	lr, r0, lr, lsl #0x20-16
+	MVNEQ	lr, #0x00                   @  Clip to slowest decay when Decay=1.0
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
 1:	MOVS	r5, r5, lsr #0x01   @ <- Galois LFSR PRNG
 	EORCS	r5, r5, #0x60000000
