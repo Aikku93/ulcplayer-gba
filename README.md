@@ -37,7 +37,7 @@ For stereo audio and a maximum block size of 2048 samples, memory usage is 3.1Ki
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/11/2)
+## Pre-built Demo (Last update: 2021/11/04)
 
 ### **WARNING: Flashing lights.**
 
