@@ -786,10 +786,10 @@ VBlankIRQ:
 	AND	sl, r4, sl
 	SUB	sl, sl, r8
 	SUB	fp, fp, r9
-	MUL	sl, r0, sl
-	MUL	fp, r0, fp
-	ADD	r8, sl, r8, lsl #0x05
-	ADD	r9, fp, r9, lsl #0x05
+	MLA	ip, sl, r0, r4  @ <- Round up (avoids weird glitching with certain colour combinations)
+	MLA	lr, fp, r0, r4
+	ADD	r8, ip, r8, lsl #0x05
+	ADD	r9, lr, r9, lsl #0x05
 	AND	r8, r4, r8, lsr #0x05
 	AND	r9, r4, r9, lsr #0x05
 	ORR	r8, r8, r9, ror #0x10
