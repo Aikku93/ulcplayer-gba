@@ -12,6 +12,8 @@
 .equ GRAPH_H,  64 @ Pixels
 .equ GRAPH_H_LOG2, 6
 .equ GRAPH_TILEOFS, 42
+.equ GRAPH_NCOLS, 224
+.equ GRAPH_IDLE_CYCLE_SPEED, 0xFF00
 .equ GRAPH_SMPSTRIDE_RCP, 9363 @ Floor[2^27 / (VBlankRate * GRAPH_W)]
 /**************************************/
 .equ BACKDROP_ENABLE,  1
@@ -124,8 +126,8 @@ main:
 	BNE	1b
 .endif
 0:	LDR	r0, =BgDesignSprites_Pal
-	LDR	r1, =0x05000200
-	LDR	r2, =(0x02 * 16*16 / 0x04)
+	LDR	r1, =0x05000200 + 0x02*GRAPH_NCOLS
+	LDR	r2, =(0x02*(256-GRAPH_NCOLS) / 0x04)
 	SWI	0x0C
 0:	LDR	r0, =.LBgDesignSprites_OAMData
 	LDR	r1, =0x07000000 @ Setup sprites
@@ -705,9 +707,7 @@ VBlankIRQ:
 	LDR	r6, =BGDesign_GraphLUT
 	LDR	r8, =0x06010000 + 0x20*GRAPH_TILEOFS
 	MOV	r4, r4, lsr #(27-12)    @ Step -> .12fxp, PosMu=0 to HI
-.if BACKDROP_ENABLE
 	MOV	r7, #0x00               @ LPEnergy -> r7
-.endif
 1:	ADD	r4, r4, r4, lsl #0x10   @ [PosMu += Step]
 10:	LDRB	sl, [r2, r1, lsl #0x08] @ Abs[xR] -> sl
 	LDRB	fp, [r2], r4, lsr #0x1C @ Abs[xL] -> fp, update position
@@ -727,9 +727,7 @@ VBlankIRQ:
 	RSB	ip, fp, sl              @ Add to integrated energy -> fp (Blue)
 	ADD	fp, fp, ip, asr #0x03
 	STRB	fp, [r0, #GRAPH_W-1]
-.if BACKDROP_ENABLE
 	MLA	r7, fp, fp, r7          @ Accumulate to "LP" energy
-.endif
 20:	RSB	sl, sl, sl, lsl #0x02   @ Normalization rescaling (Red = 3/8, Blue=3/4)
 	RSB	fp, fp, fp, lsl #0x02
 	MOV	sl, sl, lsr #0x03
@@ -754,16 +752,55 @@ VBlankIRQ:
 	ADDEQ	r8, r8, #(GRAPH_H/2)*8-8*8
 	ADDS	r1, r1, #0x01<<24                @ Next sample?
 	BCC	1b
+0:	LDR	r0, .LVBlankIRQ_GraphEnergy @ Smooth out LPEnergy before doing anything
+	SUBS	r7, r7, r0
+	ADDHI	r7, r0, r7, asr #0x01          @ Attack is faster than decay
+	ADDCC	r7, r0, r7, asr #0x03
+	STRNE	r7, .LVBlankIRQ_GraphEnergy
+
+.LVBlankIRQ_GraphColourCycle:
+	LDR	r0, .LVBlankIRQ_GraphCycleOffset
+	ADD	r1, r7, #GRAPH_IDLE_CYCLE_SPEED
+	ADD	r1, r0, r1
+	CMP	r1, #0x03<<24         @ Wrap after 3 cycles
+	SUBCS	r1, r1, #0x03<<24
+	STR	r1, .LVBlankIRQ_GraphCycleOffset
+	LDR	r1, =BgDesignGraph_Pal
+	LDR	ip, =0x02*GRAPH_NCOLS
+	MOV	r2, r0, lsr #0x18     @ CurveIdx -> r2
+	ADD	r3, r2, #0x01         @ CurveIdx+1 -> r3
+	CMP	r3, #0x03
+	SUBCS	r3, r3, #0x03
+	MOV	r0, r0, lsr #0x18-5   @ CurveMu -> r0 [.5fxp]
+	AND	r0, r0, #0x1F
+	MLA	r2, ip, r2, r1        @ SrcA -> r2
+	MLA	r3, ip, r3, r1        @ SrcB -> r3
+	LDR	r1, =0x05000200
+	LDR	r4, =0x03E07C1F
+	LDR	r5, =GRAPH_NCOLS
+1:	LDR	r8, [r2], #0x04 @ a -> r8,r9
+	LDR	sl, [r3], #0x04 @ b -> sl,fp
+	AND	r9, r4, r8, ror #0x10
+	AND	r8, r4, r8
+	AND	fp, r4, sl, ror #0x10
+	AND	sl, r4, sl
+	SUB	sl, sl, r8
+	SUB	fp, fp, r9
+	MUL	sl, r0, sl
+	MUL	fp, r0, fp
+	ADD	r8, sl, r8, lsl #0x05
+	ADD	r9, fp, r9, lsl #0x05
+	AND	r8, r4, r8, lsr #0x05
+	AND	r9, r4, r9, lsr #0x05
+	ORR	r8, r8, r9, ror #0x10
+	STR	r8, [r1], #0x04
+	SUBS	r5, r5, #0x02
+	BNE	1b
 
 .if BACKDROP_ENABLE
 
 @ r7: LPEnergy
 .LVBlankIRQ_RescaleBackdrop:
-	LDR	r0, .LVBlankIRQ_BackdropEnergy @ Smooth out LPEnergy before doing anything
-	SUBS	r7, r7, r0
-	ADDHI	r7, r0, r7, asr #0x01          @ Attack is faster than decay
-	ADDCC	r7, r0, r7, asr #0x03
-	STRNE	r7, .LVBlankIRQ_BackdropEnergy
 0:	MOV	r0, #0x0100
 	SUBS	r1, r7, #0x010000
 	SUBCS	r0, r0, r1, lsr #0x0D  @ Scale = 1 - Max[0,LPEnergy-ARBITRARY_OFFSET]/ARBITRAY_SCALE_FACTOR -> r0
@@ -964,11 +1001,8 @@ VBlankIRQ:
 	.word 0x00000000,0x0000000F,0x000000F0,0x000000FF,0x00000F00,0x00000F0F,0x00000FF0,0x00000FFF
 	.word 0x0000F000,0x0000F00F,0x0000F0F0,0x0000F0FF,0x0000FF00,0x0000FF0F,0x0000FFF0,0x0000FFFF
 
-.if BACKDROP_ENABLE
-
-.LVBlankIRQ_BackdropEnergy: .word 0
-
-.endif
+.LVBlankIRQ_GraphEnergy: .word 0
+.LVBlankIRQ_GraphCycleOffset: .word 0
 
 /**************************************/
 .size VBlankIRQ, .-VBlankIRQ
@@ -1018,10 +1052,16 @@ Backdrop_Gfx: .incbin "source/music/FrenchcoreMix/Backdrop.img.lz"
 /**************************************/
 
 BgDesignSprites_Pal:
-	.incbin "source/res/BgDesignWaveform.pal"
 	.incbin "source/res/BgDesignSprites.pal"
 .size   BgDesignSprites_Pal, .-BgDesignSprites_Pal
 .global BgDesignSprites_Pal
+
+/**************************************/
+
+BgDesignGraph_Pal:
+	.incbin "source/res/BgDesignWaveform.pal"
+.size   BgDesignGraph_Pal, .-BgDesignGraph_Pal
+.global BgDesignGraph_Pal
 
 /**************************************/
 
