@@ -16,6 +16,8 @@ By default, the player uses a quadrature oscillator for [IM]DCT routines, and su
 
 For stereo audio and a maximum block size of 2048 samples, memory usage is 3.1KiB IWRAM code, 24KiB IWRAM data, ~8KiB EWRAM data, and 236 bytes of ROM (or 8.2KiB when using LUT mode).
 
+Note that the colour blending isn't perfect (due to GBA limitations). For best results, the backdrop should have high-contrast detail to mask blending artifacts.
+
 ## Authors
  * **Ruben Nunez** - *Initial work* - [Aikku93](https://github.com/Aikku93)
 
@@ -37,18 +39,19 @@ For stereo audio and a maximum block size of 2048 samples, memory usage is 3.1Ki
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/11/04)
+## Pre-built Demo (Last update: 2021/12/11)
 
 ### **WARNING: Flashing lights.**
 
 Files:
- * [~47kbps VBR (Q=44.9 @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~46kbps VBR (Q=43, 1h37m play time) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
- * Rayvolt - And We Run
  * Vertex - Run It Up
  * Vertex - Get Down
+ * Rayvolt - And We Run
  * Damian Ray - In My Brain (Rayvolt Remix)
+ * Sefa & Crypton - Lastig
  * Vertex - Collective Paranoia
  * Sefa & Mr. Ivex - LSD Problem
  * Re-Style & Vertex - Shadow World
