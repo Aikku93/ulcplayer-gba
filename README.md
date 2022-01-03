@@ -39,7 +39,7 @@ Note that the colour blending isn't perfect (due to GBA limitations). For best r
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2021/12/11)
+## Pre-built Demo (Last update: 2022/01/03)
 
 ### **WARNING: Flashing lights.**
 
