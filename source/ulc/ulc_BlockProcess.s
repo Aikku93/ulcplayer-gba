@@ -204,8 +204,9 @@ ulc_BlockProcess:
 	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
 	EOR	r5, r6, r7, ror #0x17 @ Seed = [random garbage] -> r5
-1:	MOVS	r5, r5, lsr #0x01     @ <- Galois LFSR PRNG (similar to GBA/NDS PSG noise, but 31bit period)
-	EORCS	r5, r5, #0x60000000
+1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift (Galois LFSR can produce weird results)
+	EOR	r5, r5, r5, lsr #0x11
+	EORS	r5, r5, r5, lsl #0x05
 	RSBCS	ip, ip, #0x00         @ Sign flip at random
 	ADDS	lr, lr, #0x01<<8
 	STR	ip, [sl], #0x04
@@ -260,12 +261,12 @@ ulc_BlockProcess:
 	SUBS	lr, r0, lr, lsl #0x20-16
 	MVNEQ	lr, #0x00                   @  Clip to slowest decay when Decay=1.0
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
-1:	MOVS	r5, r5, lsr #0x01   @ <- Galois LFSR PRNG
-	EORCS	r5, r5, #0x60000000
-	MOVCC	r1, ip              @ Random sign
-	RSBCS	r1, ip, #0x00
-	UMULL	r0, ip, lr, ip      @ Scale *= Decay
-	ADDS	fp, fp, #0x01<<16   @ --CoefRem?
+1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift
+	EOR	r5, r5, r5, lsr #0x11
+	EOR	r5, r5, r5, lsl #0x05
+	EOR	r1, ip, r5, asr #0x20 @ Random sign (plus some "rounding error" from using NOT as negation)
+	UMULL	r0, ip, lr, ip        @ Scale *= Decay
+	ADDS	fp, fp, #0x01<<16     @ --CoefRem?
 	STR	r1, [sl], #0x04
 	BCC	1b
 
@@ -406,10 +407,10 @@ ulc_BlockProcess:
 	ADC	r6, r6, r2, lsl #0x10
 	STR	r6, [ip], #0x04
 	STR	r7, [lr, #-0x04]!
-	ADD	r6, r0, r0, lsr #0x02 @ c -= s*a
-	ADD	r6, r6, r6, lsr #0x02
-	ADD	r7, r1, r1, lsr #0x02 @ s += c*a
-	ADD	r7, r7, r7, lsr #0x02
+	ADD	r6, r0, r0, lsr #0x04 @ c -= s*a
+	SUB	r6, r6, r6, lsr #0x02
+	ADD	r7, r1, r1, lsr #0x04 @ s += c*a
+	SUB	r7, r7, r7, lsr #0x02
 .LQuadOscShiftS:
 	ADD	r0, r0, r7, lsr #0x00 @ <- Self-modifying
 .LQuadOscShiftC:
@@ -683,8 +684,8 @@ ulc_BlockProcess:
 
 .if ULC_USE_QUADRATURE_OSC
 
-.LQuadOscShiftS_Base: ADD r0, r0, r7, lsr #0x20 @ <- I am not crazy; enabling LSR with Shift=0 is interpreted as this
-.LQuadOscShiftC_Base: SUB r1, r1, r6, lsr #0x20
+.LQuadOscShiftS_Base: .word 0xE07FFFA7 @ ADD r0, r0, r7, lsr #-1 (we need to divide by N/2, so subtract 1 from shift factor)
+.LQuadOscShiftC_Base: .word 0xE0410FA6 @ SUB r1, r1, r6, lsr #-1
 
 .endif
 
