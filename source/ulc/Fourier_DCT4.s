@@ -63,10 +63,10 @@ Fourier_DCT4:
 	ADC	r2, r2, r7, lsl #0x10
 	MOVS	r5, ip, lsr #0x10     @ Hi0 -> r5 [.0 + Round]
 	ADC	r5, r5, lr, lsl #0x10
-	ADD	ip, sl, sl, lsr #0x02 @ c -= s*a
-	ADD	ip, ip, ip, lsr #0x02
-	ADD	lr, fp, fp, lsr #0x02 @ s += c*a
-	ADD	lr, lr, lr, lsr #0x02
+	ADD	ip, sl, sl, lsr #0x04 @ c -= s*a
+	SUB	ip, ip, ip, lsr #0x02
+	ADD	lr, fp, fp, lsr #0x04 @ s += c*a
+	SUB	lr, lr, lr, lsr #0x02
 .LQuadOscShiftS0\x:
 	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
 .LQuadOscShiftC0\x:
@@ -80,10 +80,10 @@ Fourier_DCT4:
 	ADC	r3, r3, r7, lsl #0x10
 	MOVS	r6, ip, lsr #0x10     @ Hi1 -> r6 [.0 + Round]
 	ADC	r6, r6, lr, lsl #0x10
-	ADD	ip, sl, sl, lsr #0x02 @ c -= s*a
-	ADD	ip, ip, ip, lsr #0x02
-	ADD	lr, fp, fp, lsr #0x02 @ s += c*a
-	ADD	lr, lr, lr, lsr #0x02
+	ADD	ip, sl, sl, lsr #0x04 @ c -= s*a
+	SUB	ip, ip, ip, lsr #0x02
+	ADD	lr, fp, fp, lsr #0x04 @ s += c*a
+	SUB	lr, lr, lr, lsr #0x02
 .LQuadOscShiftS1\x:
 	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
 .LQuadOscShiftC1\x:
@@ -172,8 +172,8 @@ Fourier_DCT4:
 
 .if ULC_USE_QUADRATURE_OSC
 
-.LQuadOscShiftS_Base: ADD sl, sl, lr, lsr #0x20 @ <- I am not crazy; enabling LSR with Shift=0 is interpreted as this
-.LQuadOscShiftC_Base: SUB fp, fp, ip, lsr #0x20
+.LQuadOscShiftS_Base: .word 0xE08A9FAE @ ADD sl, sl, lr, lsr #-1  (we need to divide by N/2, so subtract 1 from shift factor)
+.LQuadOscShiftC_Base: .word 0xE04BAFAC @ SUB fp, fp, ip, lsr #-1
 
 .endif
 

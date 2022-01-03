@@ -8,10 +8,12 @@
 Fourier_CosSin:
 .if ULC_USE_QUADRATURE_OSC
 	@ Quadrature oscillator terms (.16fxp)
-	@ struct { u32 cos:20, sin:12; } = {.cos=Ceiling@Cos[(n+0.5)*Pi/2/N], .sin=Ceiling@Sin[(0+0.5)*Pi/2/N]}
+	@ struct { u32 cos:20, sin:12; } = {.cos=Floor[2^16*Cos[(0+0.5)*Pi/2/N]], .sin=Floor[2^16*Sin[(0+0.5)*Pi/2/N]]}
 	@ The oscillator frequency's value is constant up to
 	@ scaling and is ommitted here; it is instead hardcoded.
-	@ The value is Tan[Pi/2/N] ~= 1.5625/N ~= (1+2^-2)(1+2^-2)/N
+	@ The value is Tan[Pi/2/N] ~= 1.59375/N ~= (1+2^-4)(1-2^-2)/(N/2)
+	@ 1.59375 is not the PSNR-optimal approximation to the Tan term,
+	@ but is PSNR-optimal for the output of larger transforms.
 	.word 0xC900FFB2 @ N=16
 	.word 0x6490FFED @ N=32
 	.word 0x3250FFFC @ N=64
