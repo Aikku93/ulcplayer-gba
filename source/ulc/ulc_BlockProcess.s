@@ -409,8 +409,8 @@ ulc_BlockProcess:
 	STR	r7, [lr, #-0x04]!
 	ADD	r6, r0, r0, lsr #0x04 @ c -= s*a
 	SUB	r6, r6, r6, lsr #0x02
-	ADD	r7, r1, r1, lsr #0x04 @ s += c*a
-	SUB	r7, r7, r7, lsr #0x02
+	ADD	r7, r1, r1, lsr #0x01 @ s += c*a
+	ADD	r7, r7, r7, lsr #0x04
 .LQuadOscShiftS:
 	ADD	r0, r0, r7, lsr #0x00 @ <- Self-modifying
 .LQuadOscShiftC:
@@ -684,8 +684,8 @@ ulc_BlockProcess:
 
 .if ULC_USE_QUADRATURE_OSC
 
-.LQuadOscShiftS_Base: .word 0xE07FFFA7 @ ADD r0, r0, r7, lsr #-1 (we need to divide by N/2, so subtract 1 from shift factor)
-.LQuadOscShiftC_Base: .word 0xE0410FA6 @ SUB r1, r1, r6, lsr #-1
+.LQuadOscShiftS_Base: .word 0xE0800027 @ ADD r0, r0, r7, lsr #32 (yes, this is correct)
+.LQuadOscShiftC_Base: .word 0xE0410FA6 @ SUB r1, r1, r6, lsr #-1 (we need to divide by N/2, so subtract 1 from shift factor)
 
 .endif
 
