@@ -43,4 +43,6 @@
 @ to anything larger, MDCT coefficients will overflow.
 @ NOTE: This refers to the internal precision, not the
 @ final audio output; this is always 8bit for GBA.
-.equ ULC_COEF_PRECISION, 28
+@ NOTE: Setting this to 20 should avoid overflow in all
+@ cases up to BlockSize=2048 (31 - Log2[2048] = 20).
+.equ ULC_COEF_PRECISION, 20
