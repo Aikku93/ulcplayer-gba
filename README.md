@@ -39,12 +39,12 @@ Note that the colour blending isn't perfect (due to GBA limitations). For best r
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2022/01/03)
+## Pre-built Demo (Last update: 2022/05/08)
 
 ### **WARNING: Flashing lights.**
 
 Files:
- * [~46kbps VBR (Q=43, 1h37m play time) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~46kbps VBR (Q=41.7, 1h37m play time) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Vertex - Run It Up
@@ -70,3 +70,10 @@ Featuring:
  * Death Punch - Nowhere Warm
  * Dr. Peacock & Sefa - Incoming
  * Re-Style & Runeforce - A New Dawn
+
+### NOTE: This is likely to be the last release of the GBA demo.
+
+The player has been ported to NDS in a much cleaner implementation that is closer to the `ulcdecodetool` style of operation. However, the code will not be released on GitHub until my NDS library has been released (as this will allow the decoder to run in its own lower-priority thread, improving usability).
+
+If you desperately wish to get your hands on the NDS version, feel free to message me (it is currently running on libnds). However, please note that it hasn't been fully debugged yet (due to real-life issues and focusing on other projects), and issues might arise in edge cases.
+
