@@ -116,7 +116,7 @@ ulc_BlockProcess:
 	ORR	r4, r4, r5, lsl #0x10 @ LastSubBlockSize|SubBlockSize<<16 -> r4
 	SUB	fp, fp, r5, lsl #0x10
 	LDR	sl, =ulc_TransformBuffer
-	B	.LDecodeCoefs_Start
+	B	.LDecodeCoefs_ChangeQuant
 
 .LDecodeCoefs_DecimationPattern:
 	.word (0+8)                                   @ 0000: N/1*
@@ -141,22 +141,23 @@ ulc_BlockProcess:
 	.word (1  ) | (2  )<<4 | (3+8)<<8 | (3  )<<12 @ 1110: N/2  | N/4  | N/8* | N/8
 	.word (1  ) | (2  )<<4 | (3  )<<8 | (3+8)<<12 @ 1111: N/2  | N/4  | N/8  | N/8*
 
-.LDecodeCoefs_ChangeQuant:
+.LDecodeCoefs_EscapeCode:
 	NextNybble
+	@ NOTE: We are assuming that we never encounter the unallocated codes Fh,Eh,Dh or Fh,Eh,Eh here
 
-.LDecodeCoefs_Start:
+.LDecodeCoefs_ChangeQuant:
 	AND	r5, r7, #0x0F
 	NextNybble
-	CMP	r5, #0x0E                         @ Normal quantizer? (8h,0h,0h..Dh)
-	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (8h,0h,Fh,Zh,Yh,Xh)
+	CMP	r5, #0x0E                         @ Normal quantizer? (Fh,0h..Dh)
+	BHI	.LDecodeCoefs_Stop_NoiseFill      @  Noise-fill (exp-decay to end) (Fh,Fh,Zh,Yh,Xh)
 	MOVCC	lr, r5
 	BCC	1f
 0:	AND	r5, r7, #0x0F
 	NextNybble
-	CMP	r5, #0x0F                         @ Stop? (8h,0h,Eh,Fh)
+	CMP	r5, #0x0F                         @ Stop? (Fh,Eh,Fh)
 	SUBEQ	r5, r0, fp, asr #0x10             @  Treat as zero-fill with N=CoefRem
-	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	ADD	lr, r5, #0x0E                     @ Extended-precision quantizer (8h,0h,Eh,0h..Ch)
+	BEQ	.LDecodeCoefs_ZerosRun_PostBiasCore
+	ADD	lr, r5, #0x0E                     @ Extended-precision quantizer (Fh,Eh,0h..Ch)
 .if 0x20-24-5+ULC_COEF_PRECISION <= 0xE+0xC       @ <- Only clip when the smallest quantizer is out of bounds of our precision
 	CMP	lr, #0x20-24-5+ULC_COEF_PRECISION @ Limit LSR value to 31 and convert >=32 to LSR #32
 	EORCS	r5, r9, #QSCALE_BASE ^ QSCALE_ZERO
@@ -166,8 +167,12 @@ ulc_BlockProcess:
 
 .LDecodeCoefs_DecodeLoop:
 	SUBS	r5, r0, r7, lsl #0x1C    @ -QCoef -> r5?
-	BEQ	.LDecodeCoefs_FillRun    @ Zeros/noise run? (0h)
-	BVS	.LDecodeCoefs_EscapeCode @ Escape code? (8h)
+	BVS	.LDecodeCoefs_NoiseFill  @  8h,Zh,Yh,Xh: Noise fill
+	BEQ	.LDecodeCoefs_ZerosRun   @  0h,0h..Fh:   Zeros run
+	CMP	r5, #0x01<<28            @  Fh...:       Escape code
+	BEQ	.LDecodeCoefs_EscapeCode
+	CMN	r5, #0x01<<28            @  1h,Yh,Xh:    Zeros run (long)
+	BEQ	.LDecodeCoefs_ZerosRunLong
 
 .LDecodeCoefs_Normal:
 	ADR	ip, .LDecodeCoefs_Normal_Uncompanded
@@ -184,24 +189,24 @@ ulc_BlockProcess:
 	.word 0x00000000,+0x01000000,+0x04000000,+0x09000000,+0x10000000,+0x19000000,+0x24000000,+0x31000000
 	.word 0x00000000,-0x31000000,-0x24000000,-0x19000000,-0x10000000,-0x09000000,-0x04000000,-0x01000000
 
-.LDecodeCoefs_FillRun:
+.LDecodeCoefs_NoiseFill:
 	NextNybble
-	AND	r5, r7, #0x0F @ n -> r5 (not yet biased)
+	AND	r5, r7, #0x0F         @ n -> r5
 	NextNybble
 	AND	ip, r7, #0x0F
+	NextNybble
 	ORR	r5, ip, r5, lsl #0x04
+	AND	ip, r7, #0x0F
 	NextNybble
-	ANDS	ip, r7, #0x0F
-	BEQ	.LDecodeCoefs_FillZeros
-
-.LDecodeCoefs_FillNoise:
-	NextNybble
+	MOVS	ip, ip, lsr #0x01     @ v -> ip
+	ADC	r5, r5, r5
+	ADD	ip, ip, #0x01
 	MUL	ip, ip, ip
-	ADD	r5, r5, #0x10         @ 0h,Zh,Yh,Xh: 16 .. 271 noise samples (Xh != 0)
-	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Scale = v^2*Quant/16 -> ip? (-5 for quantizer bias)
+	ADD	r5, r5, #0x10
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 2 @ Scale = (v+1)^2*Quant/4 -> ip? (-5 for quantizer bias)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
-	BEQ	.LDecodeCoefs_FillZeros_PostDecCore
+	BEQ	.LDecodeCoefs_ZerosRun_PostBiasCore
+	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
 	EOR	r5, r6, r7, ror #0x17 @ Seed = [random garbage] -> r5
 1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift (Galois LFSR can produce weird results)
@@ -211,27 +216,17 @@ ulc_BlockProcess:
 	ADDS	lr, lr, #0x01<<8
 	STR	ip, [sl], #0x04
 	BCC	1b
-2:	MOV	r0, #0x00 @ Reset r0,r1 to 0 again
-	MOV	r1, #0x00
-	CMP	fp, #0x010000
+2:	CMP	fp, #0x010000
 	BCS	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
-.LDecodeCoefs_EscapeCode:
+.LDecodeCoefs_ZerosRun:
 	NextNybble
-	ANDS	r5, r7, #0x0F           @ Quantizer change? (8h,0h,Xh)
-	BEQ	.LDecodeCoefs_ChangeQuant
-	@NextNybble
-	@B	.LDecodeCoefs_FillZeros_PostBiasCore @ 8h,1h..Fh: Zero run (1 .. 15 coefficients)
-	@ Z=1 cannot happen here (even if NextNybble was uncommented), so biasing is not used in fall-through
-
-@ Must enter with Z=1 to trigger biasing
-.LDecodeCoefs_FillZeros:
-	ADDEQ	r5, r5, #0x1F         @ 0h,Zh,Yh,Xh: 31 .. 286 zeros (Xh == 0)
+	AND	r5, r7, #0x0F         @ n -> r5
 	NextNybble
-.LDecodeCoefs_FillZeros_PostBiasCore:
+	ADD	r5, r5, #0x01
+.LDecodeCoefs_ZerosRun_PostBiasCore:
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= zR
-.LDecodeCoefs_FillZeros_PostDecCore:
 0:	MOVS	ip, r5, lsl #0x1F     @ N=CoefRem&1, C=CoefRem&2
 	STRMI	r0, [sl], #0x04
 	STMCSIA	sl!, {r0-r1}
@@ -243,6 +238,16 @@ ulc_BlockProcess:
 	BCS	.LDecodeCoefs_DecodeLoop
 	B	.LDecodeCoefs_NoMoreCoefs
 
+.LDecodeCoefs_ZerosRunLong:
+	NextNybble
+	AND	r5, r7, #0x0F         @ n -> r5
+	NextNybble
+	AND	ip, r7, #0x0F
+	NextNybble
+	ORR	r5, ip, r5, lsl #0x04
+	ADD	r5, r5, #0x21
+	B	.LDecodeCoefs_ZerosRun_PostBiasCore
+
 .LDecodeCoefs_Stop_NoiseFill:
 	AND	ip, r7, #0x0F               @ v -> ip
 	NextNybble
@@ -251,14 +256,14 @@ ulc_BlockProcess:
 	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
 	MOV	r5, r5, ror #0x1C
 	NextNybble
-1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/16
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/4
 	MUL	ip, ip, ip
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Same as normal noise fill. Scale -> ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 2 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
-	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-16 -> lr
+	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-19 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
-	BEQ	.LDecodeCoefs_FillZeros_PostBiasCore
-	SUBS	lr, r0, lr, lsl #0x20-16
+	BEQ	.LDecodeCoefs_ZerosRun_PostBiasCore
+	SUBS	lr, r0, lr, lsl #0x20-19
 	MVNEQ	lr, #0x00                   @  Clip to slowest decay when Decay=1.0
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
 1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift

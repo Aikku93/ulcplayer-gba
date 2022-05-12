@@ -39,12 +39,12 @@ Note that the colour blending isn't perfect (due to GBA limitations). For best r
   * [Vicetone](https://music.youtube.com/channel/UCBxPw3gBM65DpL64iD5kIiA) & [Tony Igy](https://music.youtube.com/channel/UCjW4TPq451IgyqBkDAmSdrw)
   * [Q-Dance](https://www.q-dance.com/)
 
-## Pre-built Demo (Last update: 2022/05/08)
+## Pre-built Demo (Last update: 2022/05/12)
 
 ### **WARNING: Flashing lights.**
 
 Files:
- * [~46kbps VBR (Q=41.7, 1h37m play time) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
+ * [~46kbps VBR (Q=42.42, 1h37m play time) @ 32.768kHz (M/S stereo, 31.9MiB)](https://www.mediafire.com/file/rjrdv9joq0558xq/file)
 
 Featuring:
  * Vertex - Run It Up
@@ -77,3 +77,4 @@ The player has been ported to NDS in a much cleaner implementation that is close
 
 If you desperately wish to get your hands on the NDS version, feel free to message me (it is currently running on libnds). However, please note that it hasn't been fully debugged yet (due to real-life issues and focusing on other projects), and issues might arise in edge cases.
 
+In the off chance that there is a syntax change, this demo will be updated so as to have a reference assembly decoder.
