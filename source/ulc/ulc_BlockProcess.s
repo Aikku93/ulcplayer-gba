@@ -256,9 +256,9 @@ ulc_BlockProcess:
 	ORR	r5, r5, r7, lsl #0x1C       @ Shift up and append low nybble
 	MOV	r5, r5, ror #0x1C
 	NextNybble
-1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/4
+1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/16
 	MUL	ip, ip, ip
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 2 @ Same as normal noise fill. Scale -> ip
+	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Same as normal noise fill. Scale -> ip
 	MOVS	ip, ip, lsr lr
 	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-19 -> lr
 	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
