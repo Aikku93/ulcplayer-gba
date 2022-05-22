@@ -50,6 +50,7 @@ SECTIONS {
 			*(.ewram .ewram.*)
 		} >ewram
 	__ewram_lma_end__ = __ewram_lma_beg__ + SIZEOF(.ewram);
+	ASSERT(__ewram_lma_end__ < __rom_end__, "EWRAM overflow in ROM LMA")
 		.sbss (NOLOAD) : {
 			*(.sbss .sbss.*)
 		} >ewram
@@ -63,6 +64,7 @@ SECTIONS {
 			*(.iwram .iwram.*)
 		} >iwram
 	__iwram_lma_end__ = __iwram_lma_beg__ + SIZEOF(.iwram);
+	ASSERT(__iwram_lma_end__ < __rom_end__, "IWRAM overflow in ROM LMA")
 		.bss (NOLOAD) : {
 			*(.bss .bss.*)
 		} >iwram
