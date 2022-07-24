@@ -257,22 +257,20 @@ ulc_BlockProcess:
 	MOV	r5, r5, ror #0x1C
 	NextNybble
 1:	ADD	ip, ip, #0x01               @ Unpack p = (v+1)^2*Quant/16
-	MUL	ip, ip, ip
-	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 4 @ Same as normal noise fill. Scale -> ip
-	MOVS	ip, ip, lsr lr
-	MULNE	lr, r5, r5                  @ Unpack Decay = 1 - r^2*2^-19 -> lr
-	SUBEQ	r5, r0, fp, asr #0x10       @ Out of range: Treat as zero-run to end
-	BEQ	.LDecodeCoefs_ZerosRun_PostBiasCore
-	SUBS	lr, r0, lr, lsl #0x20-19
-	MVNEQ	lr, #0x00                   @  Clip to slowest decay when Decay=1.0
+	MUL	r1, ip, ip
+	MUL	r2, r5, r5                  @ Unpack Decay = 1 - r^2*2^-19 -> r2
+	MOV	r1, r1, lsl #ULC_COEF_PRECISION-5 - 4 @ Same as normal noise fill. Scale -> r1
+	SUBS	r2, r0, r2, lsl #0x20-19
+	MVNEQ	r2, #0x00                   @  Clip to slowest decay when Decay=1.0
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
 1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift
 	EOR	r5, r5, r5, lsr #0x11
 	EOR	r5, r5, r5, lsl #0x05
-	EOR	r1, ip, r5, asr #0x20 @ Random sign (plus some "rounding error" from using NOT as negation)
-	UMULL	r0, ip, lr, ip        @ Scale *= Decay
+	EOR	r3, r1, r5, asr #0x20 @ Random sign (plus some "rounding error" from using NOT as negation)
+	MOV	r3, r3, asr lr
+	UMULL	r0, r1, r2, r1        @ Scale *= Decay
 	ADDS	fp, fp, #0x01<<16     @ --CoefRem?
-	STR	r1, [sl], #0x04
+	STR	r3, [sl], #0x04
 	BCC	1b
 
 .LDecodeCoefs_NoMoreCoefs:
