@@ -1106,7 +1106,7 @@ MainFont:
 /**************************************/
 
 SoundFiles:
-	.word 23 @ Number of tracks
+	.word 14 @ Number of tracks
 	.word  10f,  11f
 	.word  20f,  21f
 	.word  30f,  31f
@@ -1121,64 +1121,37 @@ SoundFiles:
 	.word 120f, 121f
 	.word 130f, 131f
 	.word 140f, 141f
-	.word 150f, 151f
-	.word 160f, 161f
-	.word 170f, 171f
-	.word 180f, 181f
-	.word 190f, 191f
-	.word 200f, 201f
-	.word 210f, 211f
-	.word 220f, 221f
-	.word 230f, 231f
 
 	.LSoundFiles_OriginSongName:
-	 11: .asciz "Vertex - Run It Up"
-	 21: .asciz "Vertex - Get Down"
-	 31: .asciz "Rayvolt - And We Run"
-	 41: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"
-	 51: .asciz "Sefa & Crypton - Lastig"
-	 61: .asciz "Vertex - Collective Paranoia"
-	 71: .asciz "Sefa & Mr. Ivex - LSD Problem"
-	 81: .asciz "Re-Style & Vertex - Shadow World"
-	 91: .asciz "Sefa - Schopenhauer"
-	101: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"
-	111: .asciz "Juju Rush - Catching Fire"
-	121: .asciz "Vertex - Let It Roll"
-	131: .asciz "Re-Style - Towards the Sun (Vertex & Rayvolt Remix)"
-	141: .asciz "Vertex - Radiance"
-	151: .asciz "Re-Style - Wildfire"
-	161: .asciz "Toto - Africa (Rayvolt Remix)"
-	171: .asciz "Rayvolt - Wellerman"
-	181: .asciz "Vicetone & Tony Igy - Astronomia (Rayvolt Remix)"
-	191: .asciz "Re-Style & Korsakoff - Leap of Faith"
-	201: .asciz "Runeforce ft. Lune - Lonely Soldier"
-	211: .asciz "Death Punch - Nowhere Warm"
-	221: .asciz "Dr. Peacock & Sefa - Incoming"
-	231: .asciz "Re-Style & Runeforce - A New Dawn"
+	 11: .asciz "Rayvolt - And We Run"
+	 21: .asciz "Damian Ray - In My Brain (Rayvolt Remix)"
+	 31: .asciz "Vertex - Collective Paranoia"
+	 41: .asciz "Sefa & Crypton - Lastig"
+	 51: .asciz "Runeforce ft. Lune - Lonely Soldier"
+	 61: .asciz "Re-Style & Vertex - Shadow World"
+	 71: .asciz "Dr. Peacock - Vive La Volta (Sefa Remix)"
+	 81: .asciz "Irradiate - Edge of Infinity (In Our Blood)"
+	 91: .asciz "Juju Rush - Catching Fire"
+	101: .asciz "Vertex - Let It Roll"
+	111: .asciz "Re-Style ft. Cammie Robinson - Feel Alive"
+	121: .asciz "Vertex - Radiance"
+	131: .asciz "Nosferatu & Nolz - Cosmic Conquest (Official Masters of Hardcore 2023 Anthem)"
+	141: .asciz "Re-Style & Runeforce - A New Dawn"
 
-	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Vertex - Run It Up.ulc"
-	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Vertex - Get Down.ulc"
-	.balign 4;  30: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
-	.balign 4;  40: .incbin "source/music/FrenchcoreMix/Damian Ray - In My Brain (Rayvolt Remix).ulc"
-	.balign 4;  50: .incbin "source/music/FrenchcoreMix/Sefa & Crypton - Lastig.ulc"
-	.balign 4;  60: .incbin "source/music/FrenchcoreMix/Vertex - Collective Paranoia.ulc"
-	.balign 4;  70: .incbin "source/music/FrenchcoreMix/Sefa & Mr. Ivex - LSD Problem.ulc"
-	.balign 4;  80: .incbin "source/music/FrenchcoreMix/Re-Style & Vertex - Shadow World.ulc"
-	.balign 4;  90: .incbin "source/music/FrenchcoreMix/Sefa - Schopenhauer.ulc"
-	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Dr. Peacock - Vive La Volta (Sefa Remix).ulc"
-	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
-	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
-	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Re-Style - Towards the Sun (Vertex & Rayvolt Remix).ulc"
-	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Vertex - Radiance.ulc"
-	.balign 4; 150: .incbin "source/music/FrenchcoreMix/Re-Style - Wildfire.ulc"
-	.balign 4; 160: .incbin "source/music/FrenchcoreMix/Toto - Africa (Rayvolt Remix).ulc"
-	.balign 4; 170: .incbin "source/music/FrenchcoreMix/Rayvolt - Wellerman.ulc"
-	.balign 4; 180: .incbin "source/music/FrenchcoreMix/Vicetone & Tony Igy - Astronomia (Rayvolt Remix).ulc"
-	.balign 4; 190: .incbin "source/music/FrenchcoreMix/Re-Style & Korsakoff - Leap of Faith.ulc"
-	.balign 4; 200: .incbin "source/music/FrenchcoreMix/Runeforce ft. Lune - Lonely Soldier.ulc"
-	.balign 4; 210: .incbin "source/music/FrenchcoreMix/Death Punch - Nowhere Warm.ulc"
-	.balign 4; 220: .incbin "source/music/FrenchcoreMix/Dr. Peacock & Sefa - Incoming.ulc"
-	.balign 4; 230: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
+	.balign 4;  10: .incbin "source/music/FrenchcoreMix/Rayvolt - And We Run.ulc"
+	.balign 4;  20: .incbin "source/music/FrenchcoreMix/Damian Ray - In My Brain (Rayvolt Remix).ulc"
+	.balign 4;  30: .incbin "source/music/FrenchcoreMix/Vertex - Collective Paranoia.ulc"
+	.balign 4;  40: .incbin "source/music/FrenchcoreMix/Sefa & Crypton - Lastig.ulc"
+	.balign 4;  50: .incbin "source/music/FrenchcoreMix/Runeforce ft. Lune - Lonely Soldier.ulc"
+	.balign 4;  60: .incbin "source/music/FrenchcoreMix/Re-Style & Vertex - Shadow World.ulc"
+	.balign 4;  70: .incbin "source/music/FrenchcoreMix/Dr. Peacock - Vive La Volta (Sefa Remix).ulc"
+	.balign 4;  80: .incbin "source/music/FrenchcoreMix/Irradiate - Edge of Infinity (In Our Blood).ulc"
+	.balign 4;  90: .incbin "source/music/FrenchcoreMix/Juju Rush - Catching Fire.ulc"
+	.balign 4; 100: .incbin "source/music/FrenchcoreMix/Vertex - Let It Roll.ulc"
+	.balign 4; 110: .incbin "source/music/FrenchcoreMix/Re-Style ft. Cammie Robinson - Feel Alive.ulc"
+	.balign 4; 120: .incbin "source/music/FrenchcoreMix/Vertex - Radiance.ulc"
+	.balign 4; 130: .incbin "source/music/FrenchcoreMix/Nosferatu & Nolz - Cosmic Conquest.ulc"
+	.balign 4; 140: .incbin "source/music/FrenchcoreMix/Re-Style & Runeforce - A New Dawn.ulc"
 
 .size SoundFiles, .-SoundFiles
 
