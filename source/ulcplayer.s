@@ -92,21 +92,21 @@ main:
 .Lmain_LoadDesign:
 0:	LDR	r0, =0x06000000 + DESIGN_TILEOFS*0x20
 	LDR	r1, =BgDesign_Gfx
-	BL	UnLZSS
+	BL	UnLZSS16
 0:	LDR	r0, =0x06000000 + DESIGN_TILEMAP*0x0800
 	LDR	r1, =BgDesign_Map
-	BL	UnLZSS
+	BL	UnLZSS16
 0:	LDR	r0, =BgDesign_Pal
 	LDR	r1, =0x05000000
 	LDR	r2, =(0x02 * 6*16 / 0x04)
 	SWI	0x0C
 0:	LDR	r0, =0x06010000
 	LDR	r1, =BgDesignSprites_Gfx
-	BL	UnLZSS
+	BL	UnLZSS16
 .if BACKDROP_ENABLE
 	LDR	r0, =0x06000000 + BACKDROP_CHARMAP*0x4000
 	LDR	r1,=Backdrop_Gfx
-	BL	UnLZSS
+	BL	UnLZSS16
 	LDR	r0, =.Lmain_ZeroWord
 	LDR	r1, =0x06000000 + BACKDROP_TILEMAP*0x0800
 	LDR	r2, =(0x0800 / 0x04) | 1<<24
@@ -1009,10 +1009,10 @@ VBlankIRQ:
 /**************************************/
 
 .section .rodata
-.balign 4
 
 /**************************************/
 
+.balign 4
 BgDesign_Gfx:
 	.incbin "source/res/BgDesign.gfx.lz"
 .size   BgDesign_Gfx, .-BgDesign_Gfx
@@ -1020,6 +1020,7 @@ BgDesign_Gfx:
 
 /**************************************/
 
+.balign 4
 BgDesign_Map:
 	.incbin "source/res/BgDesign.map.lz"
 .size   BgDesign_Map, .-BgDesign_Map
@@ -1027,6 +1028,7 @@ BgDesign_Map:
 
 /**************************************/
 
+.balign 4
 BgDesign_Pal:
 	.incbin "source/res/BgDesign.pal"
 .if BACKDROP_ENABLE
@@ -1037,6 +1039,7 @@ BgDesign_Pal:
 
 /**************************************/
 
+.balign 4
 BgDesignSprites_Gfx:
 	.incbin "source/res/BgDesignSprites.gfx.lz"
 .size   BgDesignSprites_Gfx, .-BgDesignSprites_Gfx
@@ -1044,6 +1047,7 @@ BgDesignSprites_Gfx:
 
 .if BACKDROP_ENABLE
 
+.balign 4
 Backdrop_Gfx: .incbin "source/music/FrenchcoreMix/Backdrop.img.lz"
 .size Backdrop_Gfx, .-Backdrop_Gfx
 
@@ -1051,6 +1055,7 @@ Backdrop_Gfx: .incbin "source/music/FrenchcoreMix/Backdrop.img.lz"
 
 /**************************************/
 
+.balign 4
 BgDesignSprites_Pal:
 	.incbin "source/res/BgDesignSprites.pal"
 .size   BgDesignSprites_Pal, .-BgDesignSprites_Pal
@@ -1058,6 +1063,7 @@ BgDesignSprites_Pal:
 
 /**************************************/
 
+.balign 4
 BgDesignGraph_Pal:
 	.incbin "source/res/BgDesignWaveform.pal"
 .size   BgDesignGraph_Pal, .-BgDesignGraph_Pal
@@ -1065,6 +1071,7 @@ BgDesignGraph_Pal:
 
 /**************************************/
 
+.balign 4
 BGDesign_GraphLUT:
 	.incbin "source/res/BgDesignWaveformLUT.bin"
 .size   BGDesign_GraphLUT, .-BGDesign_GraphLUT
