@@ -1,5 +1,5 @@
 /**************************************/
-.include "source/ulc/ulc_Specs.inc"
+#include "libulc/ulc_Specs.h"
 /**************************************/
 @ Graphs to OBJ
 @ Glyphs to BG0
@@ -177,12 +177,14 @@ main:
 	LDR	r1, =_IRQTable
 	LDR	r0, =VBlankIRQ
 	STR	r0, [r1, #0x04*0] @ Set VBlank interrupt
+	LDR	r0, =ulc_Sync
+	STR	r0, [r1, #0x04*4] @ Set Timer1 interrupt
 	LDR	r1, =0x04000004
 	LDR	r0, =1<<3
 	STRH	r0, [r1]          @ Enable VBlank IRQ triggers
 	LDR	r1, =0x04000200
 	LDRH	r0, [r1]
-	ADD	r0, #0x01         @ Enable VBlank IRQ
+	ADD	r0, #0x11         @ Enable VBlank and TIMER1 IRQ
 	STRH	r0, [r1]
 0:	LDR	r4, =ulc_State
 	MOV	r5, #0x00         @ CurrentSoundFile = NULL -> r5
@@ -190,6 +192,7 @@ main:
 	LDR	r7, =TIMEDISPLAY_NULL
 	MOV	r8, r5            @ KeysLastUpdate = 0 -> r8
 	MOV	r9, r5            @ CurSongIdx = 0 -> r9
+0:
 
 @ r4: &State
 @ r5:  CurrentSoundFile
@@ -199,7 +202,7 @@ main:
 @ r9:  CurSongIdx
 
 .LMainLoop:
-	BL	ulc_BlockProcess
+	BL	ulc_UpdatePlayer
 0:	LDR	r0, =0x04000130
 	BL	.Lmain_DisableIRQTHUMB @ <- Lock to avoid VBlankIRQ() changing the values we modify here
 	LDRH	r0, [r0] @ KeysThisUpdate -> r0
@@ -276,10 +279,10 @@ main:
 	B	.LMainLoop
 
 .LMainLoop_PauseSong:
-	LDR	r0, [r4, #0x04] @ Toggle Pause flag
+	LDRB	r0, [r4, #0x04] @ Toggle Pause flag
 	MOV	r1, #0x01<<1
 	EOR	r0, r1
-	STR	r0, [r4, #0x04]
+	STRB	r0, [r4, #0x04]
 	B	.LMainLoop_ProcessState
 
 .LMainLoop_PreviousSong:
@@ -315,8 +318,14 @@ main:
 	ADD	r1, r0
 	LDR	r2, =.LVBlankIRQ_TrackName
 	LDMIA	r1, {r0-r1}
-	STR	r1, [r2] @ Store new song name, and play it
-	BL	ulc_Init
+	STR	r1, [r2]        @ Store new song name, and play it
+	LDRH	r1, [r0, #0x04] @ Start TIMER1
+	MOV	r2, #0xC5
+	LSL	r2, #0x10
+	SUB	r1, r2, r1
+	LDR	r2, =0x04000104
+	STR	r1, [r2]
+	BL	ulc_StartPlayer
 	B	.LMainLoop_ProcessState
 
 /**************************************/
@@ -513,11 +522,12 @@ VBlankIRQ:
 	MOV	sl, r0, lsl #0x10      @ BlockSize -> sl
 	MOV	sl, sl, lsr #0x10
 	MUL	r1, r1, sl             @ nSmp = nBlocks*BlockSize -> r1
-	LDR	r2, [r4, #0x04]        @ WrBufIdx | Pause<<1 | (nBlkRem-1)<<2 -> r2
+	LDR	r2, [r4, #0x04]        @ WrBufIdx | Pause<<1 | nBlkRem<<2 -> r2
 	RSB	r5, r5, #0x010000      @ SmpPos = BlockSize - ((1<<16)-TimerVal)
 	RSB	r5, r5, sl
 	MLA	r5, sl, ip, r5         @ SmpPos += RdBufIdx*BlockSize (adjust for double buffer)
-	MVN	r2, r2, lsr #0x02      @ -SmpRem = -nBlkRem*BlockSize + SmpPos -> r3 (nBlkRem is pre-decremented, so add 1)
+	MOV	r2, r2, lsr #0x02      @ -SmpRem = -nBlkRem*BlockSize + SmpPos -> r3
+	RSB	r2, r2, #0x00
 	MLA	r3, r2, sl, r5         @ NOTE: nBlkRem is not particularly reliable, but should be fine for display purposes
 	ADD	r6, r1, r3             @ SmpOfs = nSmp - SmpRem -> r6
 .if 0 @ This overflows on long tracks

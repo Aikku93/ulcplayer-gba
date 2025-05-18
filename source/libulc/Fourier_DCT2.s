@@ -1,8 +1,7 @@
 /**************************************/
-.include "source/ulc/ulc_Specs.inc"
+#include "AsmMacros.h"
 /**************************************/
-.section .iwram, "ax", %progbits
-.balign 4
+#include "ulc_Specs.h"
 /**************************************/
 .equ DCT2_LESS_STACK_USE, 0
 /**************************************/
@@ -12,7 +11,9 @@
 @ r2:  N
 @ NOTE: Must return to ARM code
 
-.arm
+ASM_FUNC_GLOBAL(Fourier_DCT2)
+ASM_FUNC_BEG   (Fourier_DCT2, ASM_MODE_ARM;ASM_SECTION_IWRAM)
+
 Fourier_DCT2:
 	CMP	r2, #0x08
 	BEQ	.LDCT2_8
@@ -158,8 +159,9 @@ Fourier_DCT2:
 2:	LDMFD	sp!, {r4-r8,pc}
 
 /**************************************/
-.size   Fourier_DCT2, .-Fourier_DCT2
-.global Fourier_DCT2
+
+ASM_FUNC_END(Fourier_DCT2)
+
 /**************************************/
-/* EOF                                */
+//! EOF
 /**************************************/

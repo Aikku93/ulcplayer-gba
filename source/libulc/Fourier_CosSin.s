@@ -1,9 +1,11 @@
 /**************************************/
-.include "source/ulc/ulc_Specs.inc"
+#include "AsmMacros.h"
 /**************************************/
-.section .rodata
-.balign 4
+#include "ulc_Specs.h"
 /**************************************/
+
+ASM_DATA_GLOBAL(Fourier_CosSin)
+ASM_DATA_BEG   (Fourier_CosSin, ASM_SECTION_RODATA;ASM_ALIGN(4))
 
 Fourier_CosSin:
 .if ULC_USE_QUADRATURE_OSC
@@ -35,9 +37,8 @@ Fourier_CosSin:
 	.incbin "source/ulc/Fourier_CosSin16.bin" @ 16bit coefficients
 .endif
 
+ASM_DATA_END(Fourier_CosSin)
+
 /**************************************/
-.size   Fourier_CosSin, .-Fourier_CosSin
-.global Fourier_CosSin
-/**************************************/
-/* EOF                                */
+//! EOF
 /**************************************/

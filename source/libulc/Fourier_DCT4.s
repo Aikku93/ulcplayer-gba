@@ -1,8 +1,7 @@
 /**************************************/
-.include "source/ulc/ulc_Specs.inc"
+#include "AsmMacros.h"
 /**************************************/
-.section .iwram, "ax", %progbits
-.balign 4
+#include "ulc_Specs.h"
 /**************************************/
 .equ DCT4_LESS_STACK_USE, 0
 /**************************************/
@@ -12,7 +11,9 @@
 @ r2:  N
 @ NOTE: Must return to ARM code
 
-.arm
+ASM_FUNC_GLOBAL(Fourier_DCT4)
+ASM_FUNC_BEG   (Fourier_DCT4, ASM_MODE_ARM;ASM_SECTION_IWRAM)
+
 Fourier_DCT4:
 	CMP	r2, #0x08
 	BEQ	.LDCT4_8
@@ -21,7 +22,7 @@ Fourier_DCT4:
 	STMFD	sp!, {r2,r4-fp,lr}
 .if ULC_USE_QUADRATURE_OSC
 	LDR	ip, =0x077CB531
-	LDR	lr, =_IRQProc_Log2Tab
+	LDR	lr, =ulc_Log2Table
 	MUL	r3, ip, r2
 .else
 	LDR	fp, =Fourier_CosSin - 0x04*(16/2)
@@ -281,8 +282,9 @@ Fourier_DCT4:
 2:	LDMFD	sp!, {r4-r8,pc}
 
 /**************************************/
-.size   Fourier_DCT4, .-Fourier_DCT4
-.global Fourier_DCT4
+
+ASM_FUNC_END(Fourier_DCT4)
+
 /**************************************/
-/* EOF                                */
+//! EOF
 /**************************************/

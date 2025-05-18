@@ -2,7 +2,7 @@
 PATH := /x/Tools/GCCARM/bin:$(PATH)
 #----------------------------#
 
-SOURCES  := source source/res source/sys source/ulc
+SOURCES  := source source/res source/sys source/libulc
 INCLUDES := include
 BUILD    := build
 TARGET   := ulcplayer
