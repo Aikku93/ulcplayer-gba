@@ -3,7 +3,22 @@
 /**************************************/
 #include "ulc_Specs.h"
 /**************************************/
+#if !ULC_USE_INPLACE_XFM
+/**************************************/
 .equ DCT4_LESS_STACK_USE, 0
+/**************************************/
+
+@ Same oscillator as IMDCT, just at a different phase offset.
+.macro STEP_OSCILLATOR PatchLabel
+	ADD	ip, sl, sl, asr #0x01 @ ks = s*k -> ip
+	ADD	ip, ip, ip, asr #0x04
+	ADD	lr, fp, fp, asr #0x02 @ kc = c*k -> lr
+	ADD	lr, lr, lr, asr #0x02
+\PatchLabel :
+	SUB	fp, fp, ip            @ c -= ks (needs scaling by 2/N)
+	ADD	sl, sl, lr            @ s += kc (needs scaling by 2/N)
+.endm
+
 /**************************************/
 
 @ r0: &Buf
@@ -20,103 +35,68 @@ Fourier_DCT4:
 
 .LButterflies:
 	STMFD	sp!, {r2,r4-fp,lr}
-.if ULC_USE_QUADRATURE_OSC
 	LDR	ip, =0x077CB531
 	LDR	lr, =ulc_Log2Table
 	MUL	r3, ip, r2
-.else
-	LDR	fp, =Fourier_CosSin - 0x04*(16/2)
-.endif
 0:	ADD	r8, r0, r2, lsl #0x02   @ SrcHi = Tmp+N
 	ADD	r9, r1, r2, lsl #0x02-1 @ DstHi = Tmp+N/2
-.if ULC_USE_QUADRATURE_OSC
 	LDRB	r3, [lr, r3, lsr #0x20-5] @ Log2[N] -> r3
-	LDR	fp, =Fourier_CosSin - 0x04*4 @ Table starts at N=16 (4=Log2[16])
-	LDR	ip, .LQuadOscShiftS_Base
-	LDR	lr, .LQuadOscShiftC_Base
-	LDR	fp, [fp, r3, lsl #0x02] @ c | s<<20 -> fp
-	ADD	ip, ip, r3, lsl #0x07   @ Modify the shift instructions for this N (x >> Log2[N])
+	LDR	fp, =Fourier_DCT4_TwiddleTable - 0x04*4
+	LDR	ip, .LPatchOpcodes+0x00
+	LDR	lr, .LPatchOpcodes+0x04
+	LDR	fp, [fp, r3, lsl #0x02] @ omega -> fp
+	ADD	ip, ip, r3, lsl #0x07   @ Patch shift amounts in oscillator
 	ADD	lr, lr, r3, lsl #0x07
-	STR	ip, .LQuadOscShiftS00   @ Ouch. We have to modify 8 instructions because the loop
-	STR	ip, .LQuadOscShiftS01   @ processes two samples per iteration (due to a sign-flip
-	STR	ip, .LQuadOscShiftS10   @ for the DST-via-DCT on one side), and we then unrolled
-	STR	ip, .LQuadOscShiftS11   @ two iterations, and every sample has to update the
-	STR	lr, .LQuadOscShiftC00   @ oscillator values.
-	STR	lr, .LQuadOscShiftC01
-	STR	lr, .LQuadOscShiftC10
-	STR	lr, .LQuadOscShiftC11
-	MOV	sl, fp, lsr #0x14       @ s -> sl
-	BIC	fp, fp, sl, lsl #0x14   @ c -> fp
-.else
-	ADD	fp, fp, r2, lsl #0x01
-.endif
-1:
-.irp x, 0,1
-	LDMIA	r0!, {r2-r3}          @ a = *SrcLo++
+	STR	ip, .LDCT4_Patch0+0x00
+	STR	lr, .LDCT4_Patch0+0x04
+	STR	ip, .LDCT4_Patch1+0x00
+	STR	lr, .LDCT4_Patch1+0x04
+	MOV	sl, fp, lsr #0x10       @ s = omega.Im -> sl
+	BIC	fp, fp, sl, lsl #0x10   @ c = omega.Re -> fp
+1:	LDMIA	r0!, {r2-r3}          @ a = *SrcLo++
 	LDMDB	r8!, {r4-r5}          @ b = *--SrcHi
-.if ULC_USE_QUADRATURE_OSC
+#if ULC_USE_64BIT_MATH
 	SMULL	r6, r7, r2, fp        @ Lo0 = c*a + s*b -> r6,r7 [.16]
 	SMLAL	r6, r7, r5, sl
 	RSB	r5, r5, #0x00
 	SMULL	ip, lr, r5, fp        @ Hi0 = s*a - c*b -> ip,lr [.16]
 	SMLAL	ip, lr, r2, sl
-	MOVS	r2, r6, lsr #0x10     @ Lo0 -> r2 [.0 + Round]
-	ADC	r2, r2, r7, lsl #0x10
-	MOVS	r5, ip, lsr #0x10     @ Hi0 -> r5 [.0 + Round]
-	ADC	r5, r5, lr, lsl #0x10
-	ADD	ip, sl, sl, lsr #0x04 @ c -= s*a
-	SUB	ip, ip, ip, lsr #0x02
-	ADD	lr, fp, fp, lsr #0x01 @ s += c*a
-	ADD	lr, lr, lr, lsr #0x04
-.LQuadOscShiftS0\x:
-	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
-.LQuadOscShiftC0\x:
-	SUB	fp, fp, ip, lsr #0x00 @ <- Self-modifying
+	MOVS	r2, r6, lsr #0x0F     @ Lo0 -> r2 [.0 + Round]
+	ADC	r2, r2, r7, lsl #0x20-15
+	MOVS	r5, ip, lsr #0x0F     @ Hi0 -> r5 [.0 + Round]
+	ADC	r5, r5, lr, lsl #0x20-15
+#else
+	MUL	ip, r5, fp
+	MUL	lr, r2, sl
+	MUL	r6, r2, fp
+	MLA	r6, r5, sl, r6
+	RSB	ip, ip, lr
+	MOV	r2, r6, asr #0x0F
+	MOV	r5, ip, asr #0x0F
+#endif
+	STEP_OSCILLATOR .LDCT4_Patch0
+#if ULC_USE_64BIT_MATH
 	SMULL	r6, r7, r3, fp        @ Lo1 = c*a + s*b -> r6,r7 [.16]
 	SMLAL	r6, r7, r4, sl
 	RSB	r3, r3, #0x00
 	SMULL	ip, lr, r4, fp        @ Hi1 = -s*a + c*b -> ip,lr [.16]
 	SMLAL	ip, lr, r3, sl
-	MOVS	r3, r6, lsr #0x10     @ Lo1 -> r3 [.0 + Round]
-	ADC	r3, r3, r7, lsl #0x10
-	MOVS	r6, ip, lsr #0x10     @ Hi1 -> r6 [.0 + Round]
-	ADC	r6, r6, lr, lsl #0x10
-	ADD	ip, sl, sl, lsr #0x04 @ c -= s*a
-	SUB	ip, ip, ip, lsr #0x02
-	ADD	lr, fp, fp, lsr #0x01 @ s += c*a
-	ADD	lr, lr, lr, lsr #0x04
-.LQuadOscShiftS1\x:
-	ADD	sl, sl, lr, lsr #0x00 @ <- Self-modifying
-.LQuadOscShiftC1\x:
-	SUB	fp, fp, ip, lsr #0x00 @ <- Self-modifying
-.else
-	LDMIA	fp!, {ip,lr}          @ cs -> ip,lr
-	MOV	sl, ip, lsr #0x10     @ s -> sl
-	BIC	ip, ip, sl, lsl #0x10 @ c -> ip
-	SMULL	r6, r7, r2, ip        @ Lo0 = c*a + s*b -> r6,r7 [.16]
-	SMLAL	r6, r7, r5, sl
-	RSB	ip, ip, #0x00
-	SMULL	r5, ip, r5, ip        @ Hi0 = s*a - c*b -> r5,ip [.16] <- GCC complains about this, but should be fine
-	SMLAL	r5, ip, r2, sl
-	MOVS	r2, r6, lsr #0x10     @ Lo0 -> r2 [.0 + Round]
-	ADC	r2, r2, r7, lsl #0x10
-	MOVS	r5, r5, lsr #0x10     @ Hi0 -> r5 [.0 + Round]
-	ADC	r5, r5, ip, lsl #0x10
-	MOV	ip, lr, lsr #0x10     @ s -> ip
-	BIC	lr, lr, ip, lsl #0x10 @ c -> lr
-	SMULL	r6, r7, r3, lr        @ Lo1 = c*a + s*b -> r6,r7 [.16]
-	SMLAL	r6, r7, r4, ip
-	RSB	r3, r3, #0x00
-	SMULL	r4, lr, r4, lr        @ Hi1 = -s*a + c*b -> r4,lr [.16] <- GCC complains about this, but should be fine
-	SMLAL	r4, lr, r3, ip
-	MOVS	r3, r6, lsr #0x10     @ Lo1 -> r3 [.0 + Round]
-	ADC	r3, r3, r7, lsl #0x10
-	MOVS	r6, r4, lsr #0x10     @ Hi1 -> r6 [.0 + Round]
-	ADC	r6, r6, lr, lsl #0x10
-.endif
+	MOVS	r3, r6, lsr #0x0F     @ Lo1 -> r3 [.0 + Round]
+	ADC	r3, r3, r7, lsl #0x20-15
+	MOVS	r6, ip, lsr #0x0F     @ Hi1 -> r6 [.0 + Round]
+	ADC	r6, r6, lr, lsl #0x20-15
+#else
+	MUL	ip, r4, fp
+	MUL	lr, r3, sl
+	SUB	ip, ip, lr
+	MUL	r6, r3, fp
+	MLA	r6, r4, sl, r6
+	MOV	r3, r6, asr #0x0F
+	MOV	r6, ip, asr #0x0F
+#endif
+	STEP_OSCILLATOR .LDCT4_Patch1
 	STMIA	r1!, {r2,r3}
 	STMIA	r9!, {r5,r6}
-.endr
 2:	CMP	r0, r8
 	BNE	1b
 	LDR	sl, [sp], #0x04
@@ -171,12 +151,9 @@ Fourier_DCT4:
 	STMIA	ip!, {r0-r6}
 3:	LDMFD	sp!, {r4-fp,pc}
 
-.if ULC_USE_QUADRATURE_OSC
-
-.LQuadOscShiftS_Base: .word 0xE08AA02E @ ADD sl, sl, lr, lsr #32 (yes, this is correct)
-.LQuadOscShiftC_Base: .word 0xE04BAFAC @ SUB fp, fp, ip, lsr #-1 (we need to divide by N/2, so subtract 1 from shift factor)
-
-.endif
+.LPatchOpcodes:
+	.word 0xE04BB04C @ SUB fp, fp, ip, asr #0+xx
+	.word 0xE08AA04E @ ADD sl, sl, lr, asr #0+xx
 
 /**************************************/
 
@@ -285,6 +262,8 @@ Fourier_DCT4:
 
 ASM_FUNC_END(Fourier_DCT4)
 
+/**************************************/
+#endif
 /**************************************/
 //! EOF
 /**************************************/
