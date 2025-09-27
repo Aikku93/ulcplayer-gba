@@ -61,7 +61,25 @@
   NOTE: This refers to the internal precision, not the
   final audio output; this is always 8bit for GBA.
 !*/
-#define ULC_COEF_PRECISION 20
+#define ULC_COEF_PRECISION 14
+
+/*!
+  Using an in-place transform completely removes the need
+  for the temporary buffer, potentially saving large
+  amounts of memory. However, this is necessarily slower
+  than using a temporary buffer.
+!*/
+#define ULC_USE_INPLACE_XFM 0
+
+/*!
+  Enabling 64-bit math guarantees no overflows during
+  multiplications with the IMDCT matrix, but is fairly
+  costly compared to 32-bit multiplies.
+  This option should only be attempted with 14-bit
+  coefficient precision at most, but is still NOT 100%
+  guaranteed to not have internal overflows (see above).
+!*/
+#define ULC_USE_64BIT_MATH 0
 
 /*!
   This allows ulc_StartPlayer() and ulc_StopPlayer() to

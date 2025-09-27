@@ -4,6 +4,15 @@
 #include "ulc_Specs.h"
 /**************************************/
 
+#if ULC_USE_INPLACE_XFM
+# define LAPPING_BUFFER_OFFS (0x04 * ULC_MAX_BLOCK_SIZE) //! Past the transform buffer
+#else
+# define TEMP_BUFFER_OFFS    (0x04 * ULC_MAX_BLOCK_SIZE)
+# define LAPPING_BUFFER_OFFS (0x04 * ULC_MAX_BLOCK_SIZE + TEMP_BUFFER_OFFS)
+#endif
+
+/**************************************/
+
 @ "MOV r5, r5, asr #X", lower hword
 .equ QSCALE_BASE, (0x5045 | (0x18+5 - ULC_COEF_PRECISION)<<7)
 
@@ -15,6 +24,32 @@
 	ADDS	r6, r6, #0x01<<29 @ More nybbles?
 	LDRCS	r7, [r6, #0x04]!  @  No:  Move to next data
 	MOVCC	r7, r7, lsr #0x04 @  Yes: Move to next nybble
+.endm
+
+/**************************************/
+
+@ Same oscillator as DCT4 is used here
+.macro STEP_OSCILLATOR PatchLabel
+	ADD	ip, r9, r9, asr #0x01 @ ks = s*k -> ip
+	ADD	ip, ip, ip, asr #0x04
+	ADD	lr, r8, r8, asr #0x02 @ kc = c*k -> lr
+	ADD	lr, lr, lr, asr #0x02
+\PatchLabel :
+	SUB	r8, r8, ip            @ c -= ks (needs scaling by 2/N)
+	ADD	r9, r9, lr            @ s += kc (needs scaling by 2/N)
+.endm
+
+@ Shift, clip, and mask sample
+@ Input/output in Rm, sign mask in Rn
+@ Notes:
+@  * Input is 1.x, and output is 1.7 for 8-bit audio
+.macro SCALE_AND_CLIP Rm, Rn, Mask=0
+	MOV	\Rm, \Rm, asr #(ULC_COEF_PRECISION-7)
+	TEQ	\Rm, \Rm, lsl #0x18
+	EORMI	\Rm, \Rn, \Rm, asr #0x20
+.if (\Mask != 0)
+	AND	\Rm, \Rm, #\Mask
+.endif
 .endm
 
 /**************************************/
@@ -361,256 +396,211 @@ ulc_UpdatePlayerIWRAM:
 @ sp+00h: &OutBuf | Chan<<31 | IsStereo
 
 .LDecodeCoefs_SubBlockLoop_IMDCT:
-	MOV	r0, sl                @ Undo DCT-IV
-	ADD	r1, sl, #0x04*ULC_MAX_BLOCK_SIZE @ TempBuffer(=TransformBuffer+MAX_BLOCK_SIZE)
+	MOV	r0, sl                             @ Undo DCT-IV
+#if ULC_USE_INPLACE_XFM
+	MOV	r1, r4, lsr #0x10
+	BL	Fourier_DCT4_InPlace
+#else
+	ADD	r1, sl, #TEMP_BUFFER_OFFS
 	MOV	r2, r4, lsr #0x10
 	BL	Fourier_DCT4
-
-@ r0:
-@ r1:
-@ r2:
-@ r3:
-@ r4:  SubBlockSize
-@ r5: &OutBuf
-@ r6: [Scratch]
-@ r7: [Scratch]
-@ r8: &LapEnd
-@ r9: [Scratch/&CosSinTable]
-@ sl: &Src
-@ fp:  BlockSize
-@ ip:
-@ lr:
-
-0:	LDR	r5, [sp, #0x00]       @ OutBuf -> r5
-	STMFD	sp!, {r6-r9}
-	ADD	r6, r5, r4, lsr #0x10 @ Advance to next subblock in OutBuf
-	STR	r6, [sp, #0x10]
-	MOV	r6, r4, lsr #0x10     @ OverlapSize = SubBlockSize -> r6
-	BIC	ip, r4, r6, lsl #0x10 @ LastSubBlockSize -> ip
-	TST	r8, #0x08             @ Transient subblock?
-	MOVNE	lr, r9, lsr #0x10     @  Y: OverlapSize >>= (WindowCtrl&7)
-	ANDNE	lr, lr, #0x07
-	MOVNE	r6, r6, lsr lr
-#if ULC_USE_QUADRATURE_OSC
-	LDR	r9, =0x077CB531
-#else
-	LDR	r9, =Fourier_CosSin - 0x02*16
 #endif
-	CMP	r6, ip                @ OverlapSize > LastSubBlockSize?
-	MOVHI	r6, ip                @  Y: OverlapSize = LastSubBlockSize
-	MOV	r4, r4, lsr #0x10     @ LastSubBlockSize = SubBlockSize -> r4
-	ADD	r8, sl, #0x04*ULC_MAX_BLOCK_SIZE*2 @ LappingBuffer(=TransformBuffer+2*MAX_BLOCK_SIZE) -> r8
+1:	STMFD	sp!, {r6-r9}
+	MOV	r6, r4, lsr #0x10                  @ OverlapSize = SubBlockSize -> r6
+	BIC	r7, r4, r6, lsl #0x10              @ LastSubBlockSize -> r7
+	TST	r8, #0x08                          @ Transient subblock?
+	MOVNE	ip, r9, lsr #0x10                  @  Y: OverlapSize >>= ShiftFactor(=(WindowCtrl&7))
+	ANDNE	ip, ip, #0x07
+	MOVNE	r6, r6, lsr ip
+	CMP	r6, r7                             @ OverlapSize > LastSubBlockSize?
+	MOVHI	r6, r7                             @  Y: OverlapSize = LastSubBlockSize
+	LDR	r7, [sp, #0x10]                    @ &OutBuf -> r7
+	MOV	r4, r4, lsr #0x10                  @ LastSubBlockSize = SubBlockSize -> r4
+	ADD	r5, sl, #LAPPING_BUFFER_OFFS       @ LappingBuffer -> r5
+	ADD	ip, r7, r4, lsl #0x00              @ OutBuf += SubBlockSize for next subblock
+	STR	ip, [sp, #0x10]
 #if ULC_STEREO_SUPPORT
-	TST	r5, #0x80000000                    @ Second channel?
-	BIC	r5, r5, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
-	ADDNE	r5, r5, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel data
-	ADDNE	r8, r8, #0x04*ULC_MAX_BLOCK_SIZE/2
+	TST	r7, #0x80000000                    @ Second channel?
+	BIC	r7, r7, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
+	ADDNE	r7, r7, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel data
+	ADDNE	r5, r5, #0x04*ULC_MAX_BLOCK_SIZE/2
+	STMFD	sp!, {r7,fp}
 #endif
-	ADD	r8, r8, r4, lsl #0x02-1          @ Lap   = LapBuffer+SubBlockSize/2 -> r8
-	ADD	ip, sl, #0x04*ULC_MAX_BLOCK_SIZE @ OutLo(=TempBuffer) -> ip
-	ADD	lr, ip, r4, lsl #0x02            @ OutHi = OutLo+SubBlockSize -> lr
-	ADD	sl, sl, r4, lsl #0x02-1          @ Skip the next-block aliased samples (Src += SubBlockSize/2)
-#if ULC_USE_QUADRATURE_OSC
-	MUL	r7, r9, r6
+
+.LIMDCT_SwapLappedHalf:
+	ADD	ip, sl, r4, lsl #0x02-1            @ Buf + N/2 -> ip
+	ADD	lr, r5, r4, lsl #0x02-1            @ Lap + N/2 -> lr
+	ORR	r4, r4, r6, lsl #0x10              @ SubBlockSize | OverlapSize<<16 -> r4
+1:	LDMIA	r5, {r0-r1}                        @ a = Lap[n]       -> r0,r1
+	LDMDB	lr, {r2-r3}                        @ b = Lap[N/2-1-n] -> r2,r3
+	LDMIA	sl, {r6-r7}                        @ c = Buf[n]       -> r6,r7
+	LDMDB	ip, {r8-r9}                        @ d = Buf[N/2-1-n] -> r8,r9
+	STR	r0, [ip, #-0x04]!                  @ Buf[N/2-1-n] = a
+	STR	r1, [ip, #-0x04]!
+	STR	r3, [sl], #0x04                    @ Buf[n]       = b
+	STR	r2, [sl], #0x04
+	STMIA	r5!, {r6-r7}                       @ Lap[n]       = c
+	STMDB	lr!, {r8-r9}                       @ Lap[N/2-1-n] = d
+	CMP	sl, ip
+	BCC	1b
+
+.LIMDCT_ApplyOverlap:
+	MOVS	r0, r4, lsr #0x10                  @ OverlapSize -> r0?
+	BIC	r4, r4, r0, lsl #0x10              @ SubBlockSize -> r4
+	SUB	sl, sl, r4, lsl #0x02-2            @ Rewind Buf
+	SUB	r5, r5, r4, lsl #0x02-2            @ Rewind Lap
+	BEQ	.LIMDCT_SkipOverlap
+0:	LDR	r2, =0x077CB531
+	LDR	r3, =ulc_Log2Table
+	MUL	r1, r2, r0
+	LDRB	r1, [r3, r1, lsr #0x20-5]          @ Log2[OverlapSize] -> r1
+	LDR	r8, =Fourier_DCT4_TwiddleTable - 0x04*4
+	LDR	r2, .LIMDCT_PatchOpcodes+0x00
+	LDR	r3, .LIMDCT_PatchOpcodes+0x04
+	LDR	r8, [r8, r1, lsl #0x02]            @ omega -> r8
+	ADD	r2, r2, r1, lsl #0x07              @ Patch shift amounts in oscillator
+	ADD	r3, r3, r1, lsl #0x07
+	STR	r2, .LIMDCT_Patch0+0x00
+	STR	r3, .LIMDCT_Patch0+0x04
+	STR	r2, .LIMDCT_Patch1+0x00
+	STR	r3, .LIMDCT_Patch1+0x04
+	MOV	r9, r8, lsr #0x10                  @ s = omega.Im -> r9
+	BIC	r8, r8, r9, lsl #0x10              @ c = omega.Re -> r8
+1:	SUB	r6, r4, r0                         @ OverlapStart*2 = N-OverlapSize -> r6
+	ADD	sl, sl, r6, lsl #0x02-1            @ BufLo = Buf + OverlapStart -> sl
+	ADD	fp, sl, r4, lsl #0x02-1            @ BufHi = Buf + OverlapStart + N/2 -> fp
+	SUB	r4, r4, r0, lsl #0x10-1            @ N = OverlapSize/2
+10:	LDMIA	sl, {r0-r1}                        @ a = BufLo[n] -> r0,r1
+	LDMIA	fp, {r2-r3}                        @ b = BufHi[n] -> r2,r3
+#if ULC_USE_64BIT_MATH
+	SMULL	ip, lr, r0, r9                     @ BufHi[n] = s*a0 + c*b0 -> r6
+	SMLAL	ip, lr, r2, r8
+	MOVS	r6, ip, lsr #0x0F
+	ADC	r6, r6, lr, lsl #0x20-15
+	RSB	r2, r2, #0x00                      @ BufLo[n] = c*a0 - s*b0 -> r0
+	SMULL	ip, lr, r0, r8
+	SMLAL	ip, lr, r2, r9
+	MOVS	r0, ip, lsr #0x0F
+	ADC	r0, r0, lr, lsl #0x20-15
 #else
-	ADD	r9, r9, r6, lsl #0x01            @ Index the Cos/Sin table by OverlapSize
+	MUL	r6, r9, r0
+	MLA	r6, r8, r2, r6
+	MUL	r0, r8, r0
+	MUL	r2, r9, r2
+	MOV	r6, r6, asr #0x0F
+	SUB	r0, r0, r2
+	MOV	r0, r0, asr #0x0F
 #endif
-	RSBS	r6, r6, r4                       @ Have any non-overlap samples? (nNonOverlap = SubBlockSize-OverlapSize -> r6)
-	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap
-
-@ r0: [Scratch]
-@ r1: [Scratch]
-@ r2: [Scratch]
-@ r3: [Scratch]
-@ r4:  SubBlockSize
-@ r5: &OutBuf
-@ r6: [Scratch/nNonOverlapRem]
-@ r7: [Scratch]
-@ r8: &LapSrc
-@ r9: [Scratch/&CosSinTable]
-@ sl: &Src
-@ fp:  BlockSize
-@ ip: &OutLo
-@ lr: &OutHi
-
-.LDecodeCoefs_SubBlockLoop_IMDCT_NoOverlap:
-0:	LDMDB	r8!, {r0-r3}      @ a = *--Lap
-	STR	r0, [ip, #0x0C]   @ *OutLo++ = a
-	STR	r1, [ip, #0x08]
-	STR	r2, [ip, #0x04]
-	STR	r3, [ip], #0x10
-	LDMIA	sl!, {r0-r3}      @ b = *Src++
-	STR	r0, [lr, #-0x04]! @ *--OutHi = b
-	STR	r1, [lr, #-0x04]!
-	STR	r2, [lr, #-0x04]!
-	STR	r3, [lr, #-0x04]!
-	SUBS	r6, r6, #0x08
-	BNE	0b
-1:	CMP	ip, lr @ End? (OutLo == OutHi)
-	BEQ	.LDecodeCoefs_SubBlockLoop_IMDCT_End
-
-.LDecodeCoefs_SubBlockLoop_IMDCT_Overlap:
-#if ULC_USE_QUADRATURE_OSC
-	LDR	r0, =ulc_Log2Table
-	LDR	r1, =Fourier_CosSin - 0x04*4 @ Table starts at N=16 (4=Log2[16])
-	LDRB	r0, [r0, r7, lsr #0x20-5]    @ Log2[OverlapSize] -> r0
-	LDR	r2, .LQuadOscShiftS_Base
-	LDR	r3, .LQuadOscShiftC_Base
-	LDR	r7, [r1, r0, lsl #0x02]      @ c | s<<20 -> r7
-	ADD	r2, r2, r0, lsl #0x07        @ Modify the shift instructions for this OverlapSize (x >> Log2[OverlapSize])
-	ADD	r3, r3, r0, lsl #0x07
-	STR	r2, .LQuadOscShiftS
-	STR	r3, .LQuadOscShiftC
-	MOV	r0, r7, lsr #0x14            @ s -> r0
-	BIC	r1, r7, r0, lsl #0x14        @ c -> r1
-0:	LDR	r2, [r8, #-0x04]!     @ a = *--Lap -> r2
-	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
-	SMULL	r6, r7, r2, r0        @ *--OutHi = s*a + c*b -> r6,r7 [.16]
-	SMLAL	r6, r7, r3, r1
-	RSB	r3, r3, #0x00
-	SMULL	r9, r2, r2, r1        @ *OutLo++ = c*a - s*b -> r9,r2 [.16] <- GCC complains about this, but should be fine
-	SMLAL	r9, r2, r3, r0
-	MOVS	r6, r6, lsr #0x10     @ Shift down and round
-	ADC	r7, r6, r7, lsl #0x10
-	MOVS	r6, r9, lsr #0x10
-	ADC	r6, r6, r2, lsl #0x10
-	STR	r6, [ip], #0x04
-	STR	r7, [lr, #-0x04]!
-	ADD	r6, r0, r0, lsr #0x04 @ c -= s*a
-	SUB	r6, r6, r6, lsr #0x02
-	ADD	r7, r1, r1, lsr #0x01 @ s += c*a
-	ADD	r7, r7, r7, lsr #0x04
-.LQuadOscShiftS:
-	ADD	r0, r0, r7, lsr #0x00 @ <- Self-modifying
-.LQuadOscShiftC:
-	SUB	r1, r1, r6, lsr #0x00 @ <- Self-modifying
-	CMP	ip, lr
-	BNE	0b
+	STEP_OSCILLATOR .LIMDCT_Patch0
+#if ULC_USE_64BIT_MATH
+	SMULL	ip, lr, r1, r9                     @ BufHi[n+1] = s*a1 + c*b1 -> r7
+	SMLAL	ip, lr, r3, r8
+	MOVS	r7, ip, lsr #0x0F
+	ADC	r7, r7, lr, lsl #0x20-15
+	RSB	r3, r3, #0x00                      @ BufLo[n+1] = c*a1 - s*b1 -> r1
+	SMULL	ip, lr, r1, r8
+	SMLAL	ip, lr, r3, r9
+	MOVS	r1, ip, lsr #0x0F
+	ADC	r1, r1, lr, lsl #0x20-15
 #else
-0:	LDR	r0, [r9], #0x04       @ c | s<<16 -> r0
-	LDR	r2, [r8, #-0x04]!     @ a = *--Lap -> r2
-	LDR	r3, [sl], #0x04       @ b = *Src++ -> r3
-	MOV	r1, r0, lsr #0x10     @ s -> r1
-	BIC	r0, r0, r1, lsl #0x10 @ c -> r0
-	SMULL	r6, r7, r2, r1        @ *--OutHi = s*a + c*b -> r6,r7 [.16]
-	SMLAL	r6, r7, r3, r0
-	RSB	r3, r3, #0x00
-	SMULL	r0, r2, r2, r0        @ *OutLo++ = c*a - s*b -> r0,r2 [.16] <- GCC complains about this, but should be fine
-	SMLAL	r0, r2, r3, r1
-	MOVS	r6, r6, lsr #0x10     @ Shift down and round
-	ADC	r7, r6, r7, lsl #0x10
-	MOVS	r6, r0, lsr #0x10
-	ADC	r6, r6, r2, lsl #0x10
-	STR	r6, [ip], #0x04
-	STR	r7, [lr, #-0x04]!
-	CMP	ip, lr
-	BNE	0b
+	MUL	r7, r9, r1
+	MLA	r7, r8, r3, r7
+	MUL	r1, r8, r1
+	MUL	r3, r9, r3
+	MOV	r7, r7, asr #0x0F
+	SUB	r1, r1, r3
+	MOV	r1, r1, asr #0x0F
 #endif
-
-.LDecodeCoefs_SubBlockLoop_IMDCT_End:
-	SUB	sl, sl, r4, lsl #0x02 @ Store lapped samples from start of SrcBuf to LapBuf
-	SUB	r4, r4, r4, lsl #0x10-1
-0:	LDMIA	sl!, {r0-r3,r6-r7,ip,lr}
-	STMIA	r8!, {r0-r3,r6-r7,ip,lr}
-	LDMIA	sl!, {r0-r3,r6-r7,ip,lr}
-	STMIA	r8!, {r0-r3,r6-r7,ip,lr}
-	ADDS	r4, r4, #0x10<<16
-	BCC	0b
-1:	SUB	r8, r8, r4, lsl #0x02-1 @ Rewind LapBuf, and then advance to the end
-	ADD	r8, r8, fp, lsl #0x02-1
-	SUB	sl, sl, r4, lsl #0x02-1 @ Rewind &Src
-
-@ r0: [Scratch]
-@ r1: [Scratch]
-@ r2: [Scratch]
-@ r3: [Scratch]
-@ r4:  SubBlockSize
-@ r5: &OutBuf
-@ r6:  LapRem*2
-@ r7:  nLapOut
-@ r8: &LapEnd
-@ r9:  ClipMask(=7Fh)
-@ sl: &SrcSmp
-@ fp:  BlockSize
-@ ip:
-@ lr:
-
-.equ UNPACK_SHIFT, (ULC_COEF_PRECISION+1-8) @ Input is 1.XX (+1 due to the sign bit), output is 8.0
-
-.LDecodeCoefs_SubBlockLoop_IMDCT_LappingCycle:
-	ADD	sl, sl, #0x04*ULC_MAX_BLOCK_SIZE @ &SrcSmp(=TempBuffer) -> sl
-	MOV	r9, #0x7F         @ ClipMask -> r9
-	SUB	r6, fp, r4        @ LapRem*2 = BlockSize-SubBlockSize -> r6
-	CMP	r6, r4, lsl #0x01 @ LapRem < SubBlockSize?
-	MOVCC	r7, r6, lsr #0x01 @  Y: nLapOut = LapRem       -> r7
-	MOVCS	r7, r4            @  N: nLapOut = SubBlockSize -> r7
-1:	SUBS	r7, r7, r7, lsl #0x10   @ -nLapOutRem = -nLapOut?
-	BCS	2f
-10:	LDMDB	r8!, {r0-r3}            @ *Dst++ = *--LapEnd
-	MOV	r0, r0, asr #UNPACK_SHIFT
-	MOV	r1, r1, asr #UNPACK_SHIFT
-	MOV	r2, r2, asr #UNPACK_SHIFT
-	MOV	r3, r3, asr #UNPACK_SHIFT
-	TEQ	r0, r0, lsl #0x18
-	EORMI	r0, r9, r0, asr #0x20
-	TEQ	r1, r1, lsl #0x18
-	EORMI	r1, r9, r1, asr #0x20
-	TEQ	r2, r2, lsl #0x18
-	EORMI	r2, r9, r2, asr #0x20
-	TEQ	r3, r3, lsl #0x18
-	EORMI	r3, r9, r3, asr #0x20
-	AND	r3, r3, #0xFF
-	AND	r2, r2, #0xFF
-	AND	r1, r1, #0xFF
-	ORR	r3, r3, r2, lsl #0x08
-	ORR	r3, r3, r1, lsl #0x10
-	ORR	r0, r3, r0, lsl #0x18
-	STR	r0, [r5], #0x04
-	ADDS	r7, r7, #0x04<<16
+	STEP_OSCILLATOR .LIMDCT_Patch1
+	STMIA	sl!, {r0-r1}
+	STMIA	fp!, {r6-r7}
+	ADDS	r4, r4, #0x02<<16                  @ --N?
 	BCC	10b
-2:	SUB	r0, r4, r7
-	SUBS	r7, r7, r0, lsl #0x10 @ -nSrcOut = nLapOut-SubBlockSize?
-	BCS	3f
-20:	LDMIA	sl!, {r0-r3}          @ *Dst++ = *SrcSmp++
-	MOV	r0, r0, asr #UNPACK_SHIFT
-	MOV	r1, r1, asr #UNPACK_SHIFT
-	MOV	r2, r2, asr #UNPACK_SHIFT
-	MOV	r3, r3, asr #UNPACK_SHIFT
-	TEQ	r0, r0, lsl #0x18
-	EORMI	r0, r9, r0, asr #0x20
-	TEQ	r1, r1, lsl #0x18
-	EORMI	r1, r9, r1, asr #0x20
-	TEQ	r2, r2, lsl #0x18
-	EORMI	r2, r9, r2, asr #0x20
-	TEQ	r3, r3, lsl #0x18
-	EORMI	r3, r9, r3, asr #0x20
-	AND	r0, r0, #0xFF
-	AND	r1, r1, #0xFF
-	AND	r2, r2, #0xFF
-	ORR	r0, r0, r1, lsl #0x08
-	ORR	r0, r0, r2, lsl #0x10
-	ORR	r0, r0, r3, lsl #0x18
-	STR	r0, [r5], #0x04
-	ADDS	r7, r7, #0x04<<16
-	BCC	20b
-3:	ADD	r9, r8, r7, lsl #0x02   @ LapBufDst = LapEnd -> r9
-	ORR	r7, r7, r7, lsl #0x10
-	SUBS	r7, r7, r6, lsl #0x10-1 @ -nLapShift = nLapOut-LapRem -> r7?
-	ADD	r6, r6, r7, asr #0x10-1 @ [nLapInsert*2 = LapRem*2 - nLapShift*2]
-	BCS	4f
-30:	LDMDB	r8!, {r0-r3}            @ *--LapBufDst = *--LapEnd
-	STMDB	r9!, {r0-r3}
-	ADDS	r7, r7, #0x04<<16
-	BCC	30b
-4:	MOVS	r6, r6, lsr #0x01       @ nLapInsert?
-	BEQ	5f
-40:	LDMIA	sl!, {r0-r3}            @ *--LapBufDst = *SrcSmp++
-	STR	r0, [r9, #-0x04]!
+2:	SUB	sl, sl, r4, lsl #0x02-1            @ Rewind Buf
+.LIMDCT_SkipOverlap:
+
+.LIMDCT_ReverseLastHalf:
+	ADD	r8, sl, r4, lsl #0x02-1            @ BufLo = Buf + N/2 -> r8
+	ADD	r9, sl, r4, lsl #0x02              @ BufHi = Buf + N   -> r9
+1:	LDMIA	r8, {r0-r3}                        @ a = BufLo[ n] -> r0,r1,r2,r3
+	LDMDB	r9, {r6-r7,ip,lr}                  @ b = BufHi[-n] -> lr,ip,r7,r6
+	STR	r0, [r9, #-0x04]!                  @ BufLo[ n] = b
 	STR	r1, [r9, #-0x04]!
 	STR	r2, [r9, #-0x04]!
 	STR	r3, [r9, #-0x04]!
-	SUBS	r6, r6, #0x04
-	BNE	40b
+	STR	lr, [r8], #0x04                    @ BufHi[-n] = a
+	STR	ip, [r8], #0x04
+	STR	r7, [r8], #0x04
+	STR	r6, [r8], #0x04
+	CMP	r8, r9
+	BCC	1b
+2:	LDMFD	sp!, {r7,fp}                       @ Restore OutBuf,BlockSize
+
+@ r0: [Scratch]
+@ r1: [Scratch]
+@ r2: [Scratch]
+@ r3: [Scratch]
+@ r4:  SubBlockSize
+@ r5: &LapSrc
+@ r6: &LapDst
+@ r7: &OutBuf
+@ r8:  nAvailable*2
+@ r9:  nFromLap
+@ sl: &Buf
+@ fp:  BlockSize
+@ ip:  ClipMask(=7Fh)
+@ lr: [Unused]
+
+.LIMDCT_LappingCycle:
+	ADD	r5, r5, fp, lsl #0x02-1            @ LapSrc = Lap + BlockSize/2 -> r5
+	ADD	r6, r5, #0x00                      @ LapDst = Lap + BlockSize/2 -> r6
+	SUB	r8, fp, r4                         @ nAvailable << 1 = BlockSize - SubBlockSize -> r8
+	CMP	r8, r4, lsl #0x01                  @ nFromLap = MIN(nAvailable, SubBlockSize) -> r9
+	MOVCC	r9, r8, lsr #0x01
+	MOVCS	r9, r4
+	MOV	ip, #0x7F                          @ ClipMask -> ip
+1:	SUBS	r9, r9, r9, lsl #0x10              @ Store output from lapping buffer (nFromLap samples)
+	BCS	2f
+10:	LDMDB	r5!, {r0-r3}                       @  *Dst++ = *--LapSrc
+	SCALE_AND_CLIP r0, ip
+	SCALE_AND_CLIP r1, ip, 0xFF
+	SCALE_AND_CLIP r2, ip, 0xFF
+	SCALE_AND_CLIP r3, ip, 0xFF
+	ORR	r0, r1, r0, lsl #0x08
+	ORR	r0, r2, r0, lsl #0x08
+	ORR	r0, r3, r0, lsl #0x08
+	STR	r0, [r7], #0x04
+	ADDS	r9, r9, #0x04<<16
+	BCC	10b
+2:	SUB	r4, r4, r4, lsl #0x10              @ Store remaining output from decode buffer (SubBlockSize-nFromLap samples)
+	ADDS	r4, r4, r9, lsl #0x10
+	BCS	3f
+20:	LDMIA	sl!, {r0-r3}                       @  *Dst++ = *Buf++
+	SCALE_AND_CLIP r0, ip, 0xFF
+	SCALE_AND_CLIP r1, ip, 0xFF
+	SCALE_AND_CLIP r2, ip, 0xFF
+	SCALE_AND_CLIP r3, ip
+	ORR	r3, r2, r3, lsl #0x08
+	ORR	r3, r1, r3, lsl #0x08
+	ORR	r3, r0, r3, lsl #0x08
+	STR	r3, [r7], #0x04
+	ADDS	r4, r4, #0x04<<16
+	BCC	20b
+3:	SUBS	r8, r8, r4, lsl #0x01              @ Shift lapped samples down (nAvailable-SubBlockSize samples)
+	BLS	4f
+30:	LDMDB	r5!, {r0-r3}                       @  *--LapDst = *--LapSrc
+	STMDB	r6!, {r0-r3}
+	SUBS	r8, r8, #0x04 << 1
+	BHI	30b
+4:	CMP	r9, #0x00                          @ Store new lapped samples (nFromLap samples)
+	BEQ	5f
+40:	LDMIA	sl!, {r0-r3}                       @  *--LapDst = *Buf++
+	STR	r0, [r6, #-0x04]!
+	STR	r1, [r6, #-0x04]!
+	STR	r2, [r6, #-0x04]!
+	STR	r3, [r6, #-0x04]!
+	SUBS	r9, r9, #0x04
+	BHI	40b
 5:
 
 .LDecodeCoefs_SubBlockLoop_Tail:
@@ -692,12 +682,9 @@ ulc_UpdatePlayerIWRAM:
 
 /**************************************/
 
-#if ULC_USE_QUADRATURE_OSC
-
-.LQuadOscShiftS_Base: .word 0xE0800027 @ ADD r0, r0, r7, lsr #32 (yes, this is correct)
-.LQuadOscShiftC_Base: .word 0xE0410FA6 @ SUB r1, r1, r6, lsr #-1 (we need to divide by N/2, so subtract 1 from shift factor)
-
-#endif
+.LIMDCT_PatchOpcodes:
+	.word 0xE048804C @ SUB r8, r8, ip, asr #0+xx
+	.word 0xE089904E @ ADD r9, r9, lr, asr #0+xx
 
 ASM_FUNC_END(ulc_UpdatePlayerIWRAM)
 
@@ -710,6 +697,8 @@ ulc_TransformBuffer: .space 0x04 * ULC_MAX_BLOCK_SIZE
 ASM_DATA_END(ulc_TransformBuffer)
 
 /**************************************/
+#if !ULC_USE_INPLACE_XFM
+/**************************************/
 
 ASM_DATA_BEG(ulc_TransformTemp, ASM_SECTION_IWRAM_BSS;ASM_ALIGN(4))
 
@@ -717,6 +706,8 @@ ulc_TransformTemp: .space 0x04 * ULC_MAX_BLOCK_SIZE
 
 ASM_DATA_END(ulc_TransformTemp)
 
+/**************************************/
+#endif
 /**************************************/
 
 //! This buffer needs clearing inside ulc_StartPlayer(), so it needs to be global
