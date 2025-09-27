@@ -116,6 +116,7 @@ Fourier_FFT_InPlace:
 .LBitReversePermute:
 	MOV	r2, #0x01                        @ i=1 [skip first entry]
 	MOV	r3, #0x00                        @ j=0
+#if 0 //! Standard bit-reverse permutation
 1:	MOV	ip, r1, lsr #0x01                @ k = N/2, update bit-reversed counter j
 0:	SUBS	r3, r3, ip                       @ while(j >= k) j -= k, k >>= 1
 	MOVCS	ip, ip, lsr #0x01
@@ -134,6 +135,41 @@ Fourier_FFT_InPlace:
 10:	ADDS	r2, r2, #0x01                    @ i++ [C=0]
 	SBCS	ip, r1, r2                       @ i < N-1? (via N > i+1)
 	BHI	1b
+#else //! "Algorithms for programmers", pg. 118
+	SUB	fp, sl, #0x08                    @ Buf+N-1 -> fp
+1:	ADD	r3, r3, r1, lsr #0x01            @ [x-odd] j += N/2
+	ADD	ip, r0, r2, lsl #0x03            @ Swap Buf[i],Buf[j]
+	ADD	lr, r0, r3, lsl #0x03
+	LDMIA	ip, {r4-r5}
+	LDMIA	lr, {r6-r7}
+	STMIA	lr, {r4-r5}
+	STMIA	ip, {r6-r7}
+	ADD	r2, r2, #0x01                    @ ++i
+2:	MOV	ip, r1, lsr #0x01                @ [x-even] k = N/2, update bit-reversed counter j
+0:	SUBS	r3, r3, ip                       @ while(j >= k) j -= k, k >>= 1
+	MOVCS	ip, ip, lsr #0x01
+	SUBCSS	r3, r3, ip                       @  * Unroll
+	MOVCS	ip, ip, lsr #0x01
+	BCS	0b
+	ADD	r3, r3, ip, lsl #0x01            @ Restore j, then j += k
+0:	CMP	r2, r3                           @ i < j?
+	BCS	3f
+	ADD	ip, r0, r2, lsl #0x03            @  Swap Buf[i],Buf[j]
+	ADD	lr, r0, r3, lsl #0x03
+	LDMIA	ip, {r4-r5}
+	LDMIA	lr, {r6-r7}
+	STMIA	lr, {r4-r5}
+	STMIA	ip, {r6-r7}
+	SUB	ip, fp, r2, lsl #0x03            @  Swap Buf[N-1-i],Buf[N-1-j]
+	SUB	lr, fp, r3, lsl #0x03
+	LDMIA	ip, {r4-r5}
+	LDMIA	lr, {r6-r7}
+	STMIA	lr, {r4-r5}
+	STMIA	ip, {r6-r7}
+3:	ADD	r2, r2, #0x01                    @ i++
+	CMP	r2, r1, lsr #0x01                @ i < N/2?
+	BCC	1b
+#endif
 
 /**************************************/
 
