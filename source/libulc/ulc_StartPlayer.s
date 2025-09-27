@@ -20,6 +20,8 @@ ulc_StartPlayer:
 	LDRH	r2, [r0, #0x10]                    @ File.nChan -> r2
 	LSR	r3, r4, #ULC_MAX_BLOCK_SIZE_LOG2+1 @ Incompatible block size?
 	BNE	.LInit_Exit_Fail
+	LSR	r3, r4, #ULC_MIN_BLOCK_SIZE_LOG2+1
+	BEQ	.LInit_Exit_Fail
 #if ULC_STEREO_SUPPORT
 	SUB	r1, r2, #0x01                      @ Incompatible number of channels?
 	MOV	ip, r1                             @ [IsStereo -> ip]
