@@ -306,6 +306,7 @@ ulc_UpdatePlayerIWRAM:
 	ADD	r5, r5, #0x10
 	MOV	ip, ip, lsl #ULC_COEF_PRECISION-5 - 2 @ Scale = (v+1)^2*Quant/4 -> ip? (-5 for quantizer bias)
 	MOVS	ip, ip, lsr lr        @ Out of range? Zero-code instead
+	ADCS	ip, ip, #0x00
 	BEQ	.LDecodeCoefs_ZerosRun_PostBiasCore
 	ADD	fp, fp, r5, lsl #0x10 @ CoefRem -= n
 0:	SUB	lr, lr, r5, lsl #0x08 @ Log2[Quant] | -CoefRem<<8 -> lr
@@ -313,7 +314,7 @@ ulc_UpdatePlayerIWRAM:
 1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift (Galois LFSR can produce weird results)
 	EOR	r5, r5, r5, lsr #0x11
 	EORS	r5, r5, r5, lsl #0x05
-	RSBCS	ip, ip, #0x00         @ Sign flip at random
+	RSBMI	ip, ip, #0x00         @ Sign flip at random
 	ADDS	lr, lr, #0x01<<8
 	STR	ip, [sl], #0x04
 	BCC	1b
@@ -366,9 +367,9 @@ ulc_UpdatePlayerIWRAM:
 	EOR	r5, r6, r7, ror #0x17       @ Seed = [random garbage] -> r5
 1:	EOR	r5, r5, r5, lsl #0x0D @ <- Xorshift
 	EOR	r5, r5, r5, lsr #0x11
-	EOR	r5, r5, r5, lsl #0x05
-	EOR	r3, r1, r5, asr #0x20 @ Random sign (plus some "rounding error" from using NOT as negation)
-	MOV	r3, r3, asr lr
+	EORS	r5, r5, r5, lsl #0x05
+	MOV	r3, r1, lsr lr
+	RSBMI	r3, r3, #0x00         @ Random sign
 	UMULL	r0, r1, r2, r1        @ Scale *= Decay
 	ADDS	fp, fp, #0x01<<16     @ --CoefRem?
 	STR	r3, [sl], #0x04
