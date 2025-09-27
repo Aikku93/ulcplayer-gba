@@ -53,7 +53,7 @@
   NOTE: This refers to the internal precision, not the
   final audio output; this is always 8bit for GBA.
 !*/
-#define ULC_COEF_PRECISION 14
+#define ULC_COEF_PRECISION 15
 
 /*!
   Using an in-place transform completely removes the need
