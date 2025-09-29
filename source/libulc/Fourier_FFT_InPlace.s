@@ -136,7 +136,6 @@ Fourier_FFT_InPlace:
 	SBCS	ip, r1, r2                       @ i < N-1? (via N > i+1)
 	BHI	1b
 #else //! "Algorithms for programmers", pg. 118
-	SUB	fp, sl, #0x08                    @ Buf+N-1 -> fp
 1:	ADD	r3, r3, r1, lsr #0x01            @ [x-odd] j += N/2
 	ADD	ip, r0, r2, lsl #0x03            @ Swap Buf[i],Buf[j]
 	ADD	lr, r0, r3, lsl #0x03
@@ -160,12 +159,12 @@ Fourier_FFT_InPlace:
 	LDMIA	lr, {r6-r7}
 	STMIA	lr, {r4-r5}
 	STMIA	ip, {r6-r7}
-	SUB	ip, fp, r2, lsl #0x03            @  Swap Buf[N-1-i],Buf[N-1-j]
-	SUB	lr, fp, r3, lsl #0x03
-	LDMIA	ip, {r4-r5}
-	LDMIA	lr, {r6-r7}
-	STMIA	lr, {r4-r5}
-	STMIA	ip, {r6-r7}
+	SUB	ip, sl, r2, lsl #0x03            @  Swap Buf[N-1-i],Buf[N-1-j]
+	SUB	lr, sl, r3, lsl #0x03
+	LDMDB	ip, {r4-r5}
+	LDMDB	lr, {r6-r7}
+	STMDB	lr, {r4-r5}
+	STMDB	ip, {r6-r7}
 3:	ADD	r2, r2, #0x01                    @ i++
 	CMP	r2, r1, lsr #0x01                @ i < N/2?
 	BCC	1b
