@@ -81,8 +81,6 @@ ASM_DATA_BEG(Fourier_FFT_TwiddleTable, ASM_MODE_ARM;ASM_SECTION_RODATA;ASM_ALIGN
 @ the shift factors for N > 32 inside the code.
 
 Fourier_FFT_TwiddleTable:
-0:	.hword 0x5A82,0x5A82
-	MAKE_OSCILLATOR 1,-4,-3, 0,-4,-2, 1,+3,-2 @ N = 8
 0:	.hword 0x7642,0x30FC
 	MAKE_OSCILLATOR 2,+4,-2, 1,-3,-3, 2,+4,-2 @ N = 16
 0:	.hword 0x7D8A,0x18F9
@@ -202,9 +200,96 @@ Fourier_FFT_InPlace:
 
 /**************************************/
 
+@ Perform 8-point FFT.
+@ This is similar to below, but optimized.
+.LFFT_8:
+#if ULC_USE_64BIT_MATH
+	STR	r1, [sp, #-0x04]!
+#endif
+	SUB	r0, r0, r1, lsl #0x03            @ Rewind Buf
+	MOV	r2, #0x41                        @ Sqrt[1/2] -> r2 [.14fxp]
+	ORR	r2, r2, #0x2D00
+1:	ADD	r3, r0, #0x08*(8/2)              @ &Buf[M/2] -> r3
+10:	LDMIA	r3, {r8,r9,ip,lr}                @ b0 = Buf[n+M/2] -> r8,r9, b1 = Buf[n+1+M/2] -> ip,lr
+	ADD	ip, ip, lr                       @ t1 = omega1 * b1 = (r - r*I) * b1 = Sqrt[1/2]*((Re+Im) + (-Re+Im)*I) -> ip,lr
+	RSB	lr, ip, lr, lsl #0x01
+#if ULC_USE_64BIT_MATH
+	SMULL	r1, fp, ip, r2
+	MOVS	ip, r1, lsr #0x0E
+	ADC	ip, ip, fp, lsl #0x20-14
+	SMULL	r1, fp, lr, r2
+	MOVS	lr, r1, lsr #0x0E
+	ADC	lr, lr, fp, lsl #0x20-14
+#else
+	MUL	ip, r2, ip
+	MUL	lr, r2, lr
+#endif
+	LDMIA	r0, {r4,r5,r6,r7}                @ a0 = Buf[n] -> r4,r5, a1 = Buf[n+1] -> r6,r7
+	ADD	r4, r4, r8                       @ Buf[n]       = a0 + t0
+	ADD	r5, r5, r9
+	SUB	r8, r4, r8, lsl #0x01            @ Buf[n+M/2]   = a0 - t0
+	SUB	r9, r5, r9, lsl #0x01
+#if ULC_USE_64BIT_MATH
+	ADD	r6, r6, ip                       @ Buf[n+1]     = a1 + t1
+	ADD	r7, r7, lr
+	SUB	ip, r6, ip, lsl #0x01            @ Buf[n+1+M/2] = a1 - t1
+	SUB	lr, r7, lr, lsl #0x01
+#else
+	ADD	r6, r6, ip, asr #0x0E            @ Buf[n+1]     = a1 + t1
+	ADD	r7, r7, lr, asr #0x0E
+	SUB	ip, r6, ip, asr #0x0E-1          @ Buf[n+1+M/2] = a1 - t1
+	SUB	lr, r7, lr, asr #0x0E-1
+#endif
+	STMIA	r0!, {r4,r5,r6,r7}
+	STMIA	r3!, {r8,r9,ip,lr}
+11:	LDMIA	r3, {r8,r9,ip,lr}                @ Similar same as above, but omega0 = 0+1*I, omega1 = -r - r*I
+	RSB	ip, ip, lr
+	SUB	lr, ip, lr, lsl #0x01
+#if ULC_USE_64BIT_MATH
+	SMULL	r1, fp, ip, r2
+	MOVS	ip, r1, lsr #0x0E
+	ADC	ip, ip, fp, lsl #0x20-14
+	SMULL	r1, fp, lr, r2
+	MOVS	lr, r1, lsr #0x0E
+	ADC	lr, lr, fp, lsl #0x20-14
+#else
+	MUL	ip, r2, ip
+	MUL	lr, r2, lr
+#endif
+	LDMIA	r0, {r4,r5,r6,r7}
+	ADD	r4, r4, r9
+	SUB	r5, r5, r8
+	ADD	fp, r5, r8, lsl #0x01
+	SUB	r8, r4, r9, lsl #0x01
+#if ULC_USE_64BIT_MATH
+	ADD	r6, r6, ip
+	ADD	r7, r7, lr
+	SUB	ip, r6, ip, lsl #0x01
+	SUB	lr, r7, lr, lsl #0x01
+#else
+	ADD	r6, r6, ip, asr #0x0E
+	ADD	r7, r7, lr, asr #0x0E
+	SUB	ip, r6, ip, asr #0x0E-1
+	SUB	lr, r7, lr, asr #0x0E-1
+#endif
+	STMIA	r0!, {r4,r5,r6,r7}
+	STMIA	r3!, {r8,fp,ip,lr}
+12:	ADD	r0, r0, #0x08*(8/2)              @ Step to next sub-transform
+	CMP	r0, sl
+	BCC	1b
+#if ULC_USE_64BIT_MATH
+	LDR	r1, [sp], #0x04
+#endif
+#if 0 //! We always have N > 8, so no point to this
+2:	CMP	r1, #0x08                        @ Currently have 8-point DFT. Finished?
+	LDMEQFD	sp!, {r4-fp,pc}
+#endif
+
+/**************************************/
+
 .LFFT_N:
 	LDR	ip, =Fourier_FFT_TwiddleTable    @ &NextTwiddle -> ip (we always start at M=8)
-	MOV	fp, #0x08                        @ M = 8 -> fp (currently have 4-point DFT)
+	MOV	fp, #0x10                        @ M = 16 -> fp (currently have 8-point DFT)
 	STR	ip, [sp, #-0x04]!
 
 @ The first twiddle factor is always 1+0*I, and the second is
