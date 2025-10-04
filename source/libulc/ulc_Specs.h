@@ -61,13 +61,20 @@
   amounts of memory. However, this is necessarily slower
   than using a temporary buffer.
 !*/
-#define ULC_USE_INPLACE_XFM 0
+#define ULC_USE_INPLACE_XFM 1
+
+/*!
+  Using an approximate DCT results in the fastest possible
+  execution, but is mathematically inaccurate.
+  This option is only applicable with ULC_USE_INPLACE_XFM!
+!*/
+#define ULC_PRECISE_DCT 0
 
 /*!
   Enabling 64-bit math guarantees no overflows during
   multiplications with the IMDCT matrix, but is fairly
   costly compared to 32-bit multiplies.
-  This option should only be attempted with 14-bit
+  This option should only be disabled when using 15-bit
   coefficient precision at most, but is still NOT 100%
   guaranteed to not have internal overflows (see above).
 !*/
