@@ -79,22 +79,35 @@ ASM_DATA_BEG(Fourier_FFT_TwiddleTable, ASM_MODE_ARM;ASM_SECTION_RODATA;ASM_ALIGN
 @ Note that N >= 32 has the same k1a/k2/k1b, up to scaling.
 @ Therefore, we only patch for N <= 32, and then /update/
 @ the shift factors for N > 32 inside the code.
+@ N=1024 is the exception, where it uses different values.
 
 Fourier_FFT_TwiddleTable:
 0:	.hword 0x7642,0x30FC
 	MAKE_OSCILLATOR 2,+4,-2, 1,-3,-3, 2,+4,-2 @ N = 16
+#if (ULC_MAX_BLOCK_SIZE >= 32*2)
 0:	.hword 0x7D8A,0x18F9
 	MAKE_OSCILLATOR 4,+2,+2, 3,+2,+2, 3,+4,-2 @ N = 32
+#endif
+#if (ULC_MAX_BLOCK_SIZE >= 64*2)
 0:	.hword 0x7F62,0x0C8C
 	@MAKE_OSCILLATOR 5,+2,+2, 4,+2,+2, 4,+4,-2 @ N = 64
+#endif
+#if (ULC_MAX_BLOCK_SIZE >= 128*2)
 0:	.hword 0x7FD9,0x0648
 	@MAKE_OSCILLATOR 6,+2,+2, 5,+2,+2, 5,+4,-2 @ N = 128
+#endif
+#if (ULC_MAX_BLOCK_SIZE >= 256*2)
 0:	.hword 0x7FF6,0x0324
 	@MAKE_OSCILLATOR 7,+2,+2, 6,+2,+2, 6,+4,-2 @ N = 256
+#endif
+#if (ULC_MAX_BLOCK_SIZE >= 512*2)
 0:	.hword 0x7FFE,0x0192
 	@MAKE_OSCILLATOR 8,+2,+2, 7,+2,+2, 7,+4,-2 @ N = 512
+#endif
+#if (ULC_MAX_BLOCK_SIZE >= 1024*2)
 0:	.hword 0x7FFF,0x00C9
-	@MAKE_OSCILLATOR 9,+2,+2, 8,+2,+2, 8,+4,-2 @ N = 1024
+	MAKE_OSCILLATOR 8,+4,-2, 8,+2,+2, 8,+4,-2 @ N = 1024
+#endif
 
 ASM_DATA_END(Fourier_FFT_TwiddleTable)
 
@@ -317,8 +330,13 @@ Fourier_FFT_InPlace:
 	SUB	r0, r0, r1, lsl #0x03            @ Rewind Buf
 
 .LFFT_N_Enter:
-	CMP	fp, #0x20                        @ For M > 32, we only need to modify six instructions
+#if (ULC_MAX_BLOCK_SIZE > 32*2)
+	CMP	fp, #0x20                        @ For 32 < M < 1024, we only need to modify six instructions
+# if (ULC_MAX_BLOCK_SIZE >= 1024*2)
+	RSBHIS	lr, fp, #0x0400
+# endif
 	BHI	11f
+#endif
 10:	LDMIB	ip, {r3-r9,ip,lr}                @ M <= 32: Patch all oscillator instructions
 	ADR	r2, .LFFT_N_OscillatorA          @          Note that incoming ip is destroyed!
 	STMIA	r2, {r3-r9,ip,lr}
@@ -326,6 +344,7 @@ Fourier_FFT_InPlace:
 	STMIA	r2, {r3-r9,ip,lr}
 	LDR	ip, [sp, #0x00]                  @          Reload &NextTwiddle
 	LDR	r2, [ip], #0x04*9+0x02*2         @          omega -> r2,r3 [.16fxp], and move to next twiddle
+#if (ULC_MAX_BLOCK_SIZE > 32*2)
 	B	2f
 11:	LDR	r2, .LFFT_N_OscillatorA+PATCH_OFFS_A
 	LDR	r3, .LFFT_N_OscillatorA+PATCH_OFFS_B
@@ -340,6 +359,7 @@ Fourier_FFT_InPlace:
 	STR	r4, .LFFT_N_OscillatorA+PATCH_OFFS_C
 	STR	r4, .LFFT_N_OscillatorB+PATCH_OFFS_C
 	LDR	r2, [ip], #0x04                  @         omega -> r2,r3 [.16fxp], and move to next twiddle
+#endif
 2:	STR	ip, [sp, #0x00]                  @ Store updated &NextTwiddle
 	MOV	r3, r2, lsr #0x10
 	BIC	r2, r2, r3, lsl #0x10
