@@ -425,8 +425,8 @@ ulc_UpdatePlayerIWRAM:
 	BIC	r7, r7, #0x80000001                @ [Clear Chan and IsStereo from OutBuf]
 	ADDNE	r7, r7, #0x01*ULC_MAX_BLOCK_SIZE*2 @  Skip to second channel data
 	ADDNE	r5, r5, #0x04*ULC_MAX_BLOCK_SIZE/2
-	STMFD	sp!, {r7,fp}
 #endif
+	STMFD	sp!, {r7,fp}
 
 .LIMDCT_SwapLappedHalf:
 	ADD	ip, sl, r4, lsl #0x02-1            @ Buf + N/2 -> ip
